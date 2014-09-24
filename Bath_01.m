@@ -106,7 +106,7 @@ for ii = 1 : nC
     
 end;
   
-Rubni = [ Rubni ; zeros(1,length(Rubni)) ; zeros(1,length(Rubni)) ];
+Rubni = [ Rubni ; zeros(1,length(Rubni)) ; ones(1,length(Rubni)) ];
 Rubni ( 3 , 1 ) = 0;
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -210,7 +210,7 @@ for j=1:nEL
         defxy_lista = [ defxy_lista; def_lok(3) ];
         Gauss_tocke = [ Gauss_tocke; glob_Gauss_tocke ];
         
-        Def_grad_lista = [ Def_grad_lista ; 1+dxshape4lin*Pomaci_elementa_x, dxshape4lin*Pomaci_elementa_y, dyshape4lin*Pomaci_elementa_x, 1+dyshape4lin*Pomaci_elementa_y  ];
+        Def_grad_lista = [ Def_grad_lista ; 1+dxshape4lin*Pomaci_elementa_x,  dyshape4lin*Pomaci_elementa_x,dxshape4lin*Pomaci_elementa_y, 1+dyshape4lin*Pomaci_elementa_y  ];
         
     end;
 end;
@@ -225,7 +225,7 @@ for ii = 1 : rlength * nEL
 end;
 
 
-[ Naprezanja , Deformacije ] = naprezanja_deformacije ( pomak , EL , ELX , ELY , nEL , Cmatrica );
+% [ Naprezanja , Deformacije ] = naprezanja_deformacije ( pomak , EL , ELX , ELY , nEL , Cmatrica );
 
 
 
