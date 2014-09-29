@@ -109,25 +109,35 @@ end;
 Rubni = [ Rubni ; zeros(1,length(Rubni)) ; ones(1,length(Rubni)) ];
 Rubni ( 3 , 1 ) = 0;
 
+
+% Rubni = [ 1 2 3 4; 0 1 0 1 ; 0 0 0 0];
+
+% Rubni = [ 1 2 3 4; 0 0 0 0 ; 0 0 1 1];
+
+% Rubni = [ 1 2 3 4; 0 1 0 1 ; 0 0 1 1];
+
+Rubni = [ 1 2 3 4; 0 0 1 1 ; 0 0 1 1];
+
+
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % Global stiffness matrix calculation
 
 Kg_prije = globmatkrutosti_brzi ( Kl , EL , nC );
 Kg = rubni_globmat_brzi ( Kg_prije , Rubni , nC );
 
-% FV = zeros ( 2 * nC , 1 );
-% for ii = 1 : nC
-%     if xy ( 2 , ii ) == hgrede && ( xy ( 1 , ii ) == 0 || round(xy ( 1 , ii )*1000)/1000 == lgrede )
-%         FV ( 2 * ii , 1 ) = Sila / (2*( nlelemenata ));
-%     elseif xy ( 2 , ii ) == hgrede
-%         FV ( 2 * ii , 1 ) = Sila / ( nlelemenata );
-%     end;
-% end; 
-
 FV = zeros ( 2 * nC , 1 );
-FV (end - 4 ) = Sila/2;
-FV(end - 2) = Sila;
-FV ( end ) = Sila/2;
+for ii = 1 : nC
+    if xy ( 2 , ii ) == hgrede && ( xy ( 1 , ii ) == 0 || round(xy ( 1 , ii )*1000)/1000 == lgrede )
+        FV ( 2 * ii , 1 ) = Sila / (2*( nlelemenata ));
+    elseif xy ( 2 , ii ) == hgrede
+        FV ( 2 * ii , 1 ) = Sila / ( nlelemenata );
+    end;
+end; 
+
+% FV = zeros ( 2 * nC , 1 );
+% FV (end - 4 ) = Sila/2;
+% FV(end - 2) = Sila;
+% FV ( end ) = Sila/2;
 
 FV = zeros ( 2 * nC , 1 );
 for ii = 1 : nC
@@ -138,10 +148,15 @@ for ii = 1 : nC
     end;
 end;
 
+% FV = [ 0 0 0 0 0 Sila/2 0 Sila/2 ]';
+
+FV = [ 0 0 0 0 0 Sila/2 0 Sila/2 ]';
+
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % Linear equation system solver
 
 pomak = Kg \ FV;
+
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -221,6 +236,8 @@ for ii = 1 : rlength * nEL
     
     Naprezanja_tenzor ( : , : , ii ) = [Naprezanja(ii,3),Naprezanja(ii,5);Naprezanja(ii,5),Naprezanja(ii,4)];
     Deformacije_tenzor ( : , : , ii ) = [Deformacije(ii,3),Deformacije(ii,5);Deformacije(ii,5),Deformacije(ii,4)];
+    Deformacijski_gradijent ( : , : , ii ) = [Def_grad_lista(ii,1),Def_grad_lista(ii,2);Def_grad_lista(ii,3),Def_grad_lista(ii,4)];
+    J ( ii ) = det ( Deformacijski_gradijent ( : , : , ii ) );
         
 end;
 
@@ -238,19 +255,64 @@ Energy_FEM = 0.5 * pomak' * Kg * pomak - pomak' * FV;
 W = zeros ( rlength * nEL , 1 );
 for ii = 1 : rlength * nEL
     
-    W ( ii ) = 0.5 * Naprezanja ( ii , 3 : 5 ) * Deformacije ( ii , 3 : 5 )';
-    
+    W ( ii ) = 0.5 * [Naprezanja(ii,3:5)] * [Deformacije(ii,3:5)]';
+% ,Naprezanja(ii,5)         ,Deformacije(ii,5)
 end;
 
 % Calculation of the Eshelby stress in each integration point
-Eshelby = zeros ( rlength * nEL , 1 );
+
+% Approach directly from 1d - very likely to be wrong
+Eshelby_tenzor = zeros ( 2 , 2 , rlength * nEL );
 for ii = 1 : rlength * nEL
     
     Eshelby_tenzor ( : , : , ii ) = W ( ii ) .* eye ( 2 ) -  Naprezanja_tenzor ( : , : , ii ) * Deformacije_tenzor ( : , : , ii );
     
 end;
 
+% % Approach from Mueller2002 - hyperelastic - rejected due to using a Cauchy
+% % stress in the first place to define the strain energy density
+% Eshelby_tenzor2 = zeros ( 2 , 2 , rlength * nEL );
+% for ii = 1 : rlength * nEL
+%     
+%     Eshelby_tenzor2 ( : , : , ii ) = W ( ii ) .* eye ( 2 ) -  J ( ii ) * Deformacijski_gradijent ( : , : , ii )' * Naprezanja_tenzor ( : , : , ii ) * inv ( Deformacijski_gradijent ( : , : , ii )' );
+%     
+% end;
 
+% Approach from Mueller2002 - hyperelastic - not using all the
+% transormations, just the basic facts, can you show me where it hurts,
+% there is no pain you are receding, no distant ship smoke on the horizon
+Eshelby_tenzor3 = zeros ( 2 , 2 , rlength * nEL );
+for ii = 1 : rlength * nEL
+    
+    Eshelby_tenzor3 ( : , : , ii ) = W ( ii ) .* eye ( 2 ) -  Naprezanja_tenzor ( : , : , ii ) * ( Deformacijski_gradijent ( : , : , ii ) - eye ( 2 ) );
+    
+end;
+
+
+% Approach from Mueller2002 - linear elastic - take one
+Eshelby = zeros ( rlength * nEL , 1 );
+
+for ii = 1 : rlength * nEL
+    
+    Eshelby ( ii , 1 ) = W ( ii ) - Naprezanja ( ii , 3 ) * ( Def_grad_lista ( ii , 1 ) - 1 ) - Naprezanja ( ii , 5 ) * Def_grad_lista ( ii , 3 );
+    Eshelby ( ii , 2 ) = - Naprezanja ( ii , 3 ) * Def_grad_lista ( ii , 2 ) - Naprezanja ( ii , 5 ) * ( Def_grad_lista ( ii , 4 ) - 1 );
+    Eshelby ( ii , 3 ) = - Naprezanja ( ii , 5 ) * ( Def_grad_lista ( ii , 1 ) - 1 ) - Naprezanja ( ii , 4 ) * Def_grad_lista ( ii , 3 );
+    Eshelby ( ii , 4 ) = W ( ii ) - Naprezanja ( ii , 5 ) * Def_grad_lista ( ii , 2 ) - Naprezanja ( ii , 4 ) * ( Def_grad_lista ( ii , 4 ) - 1 );
+
+end;
+
+% Approach from Mueller2002 - linear elastic - take two
+
+Eshelby2 = zeros ( rlength * nEL , 1 );
+
+for ii = 1 : rlength * nEL
+    
+    Eshelby2 ( ii , 1 ) = W ( ii ) - Naprezanja ( ii , 3 ) * Def_grad_lista ( ii , 1 )  + Naprezanja ( ii , 3 ) - Naprezanja ( ii , 5 ) * Def_grad_lista ( ii , 3 );
+    Eshelby2 ( ii , 2 ) = - Naprezanja ( ii , 5 ) * Def_grad_lista ( ii , 1 ) + Naprezanja ( ii , 5 ) - Naprezanja ( ii , 4 ) * Def_grad_lista ( ii , 3 );
+    Eshelby2 ( ii , 3 ) = - Naprezanja ( ii , 3 ) * Def_grad_lista ( ii , 2 ) - Naprezanja ( ii , 5 ) * Def_grad_lista ( ii , 4 ) + Naprezanja ( ii , 5 );
+    Eshelby2 ( ii , 4 ) = W ( ii ) - Naprezanja ( ii , 5 ) * Def_grad_lista ( ii , 2 ) - Naprezanja ( ii , 4 ) * Def_grad_lista ( ii , 4 ) + Naprezanja ( ii , 4 );
+
+end;
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % Result visualisation - needs improvement
