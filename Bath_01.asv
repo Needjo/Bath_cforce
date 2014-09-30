@@ -114,9 +114,9 @@ Rubni ( 3 , 1 ) = 0;
 
 % Rubni = [ 1 2 3 4; 0 0 0 0 ; 0 0 1 1];
 
-% Rubni = [ 1 2 3 4; 0 1 1 1 ; 0 0 1 1];
+% Rubni = [ 1 2 3 4; 0 1 0 1 ; 0 0 1 1];
 
-Rubni = [ 1 2 3 4; 0 0 0 0 ; 0 1 0 1];
+Rubni = [ 1 2 3 4; 0 0 1 1 ; 0 0 1 1];
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -150,11 +150,7 @@ end;
 
 % FV = [ 0 0 0 0 0 Sila/2 0 Sila/2 ]';
 
-% FV = [ 0 0 0 0 0 Sila/2 0 Sila/2 ]';
-
-% FV = [ 0 0 0 0 0 Sila/2 0 Sila/2 ]';
-
-FV = [ 0 0 0 Sila/2 0 0 0 Sila/2 ]';
+FV = [ 0 0 0 0 0 Sila/2 0 Sila/2 ]';
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % Linear equation system solver
@@ -320,68 +316,35 @@ end;
 
 
 
+
+
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-% Attempt at obtaining nodal forces from stress and inteprolation matrices
+% Configurational forces attempt
 
-for jj=1:nEL
-    
-    Conf_force = zeros ( 8 , 1 );
-            
-        for ii=1:rlength
+for i=1:rlength
+         
+        % Procedura koja poziva funckije oblika i njihove derivacije za
+        % pojedinu vrstu konaènih elemenata
         
-            [shape4lin,drshape4lin,dsshape4lin] = iso4lin(rgauss(ii), sgauss(ii));
-       
-            Jacobiana = jacobiana ( ELX1 ( :, jj ), ELY1 ( : , jj ) , drshape4lin , dsshape4lin );
-            invJacob = inv ( Jacobiana );
-            detJacob = det ( Jacobiana );
+        [shape4lin,drshape4lin,dsshape4lin] = iso4lin(rgauss(i), sgauss(i));
         
-            [dxshape4lin,dyshape4lin] = globderiv (invJacob,drshape4lin,dsshape4lin);      
-    
-            Bmatrica2 = formiranjeBmatrice_pstrain2_Eshelby ( dxshape4lin , dyshape4lin );
+        % Procedura koja izraèunava Jacobi-evu matricu za transformaciju iz
+        % lokalnih derivacija u globalne
         
-            Conf_force = Conf_force  + Bmatrica2' * [ Eshelby2(ii,1) Eshelby2(ii,4) Eshelby2(ii,2:3) ]' * wgauss (ii) * detJacob * tgrede ;
-                        
-        end;
-    
-    % Postavljanje gotove lokalne matrice krutosti na redno mjesto
-    % elementa. Dobivamo listu lokalnih matrica krutosti dugacku kao ukupni
-    % broj konacnih elemenata
-    
-    Conf_force_backwards (:,jj) = Conf_force;
-    
-end;
+        Jacobiana = jacobiana ( ELX1 ( :, j ), ELY1 ( : , j ) , drshape4lin , dsshape4lin );
+        invJacob = inv ( Jacobiana );
+        detJacob = det ( Jacobiana );
+        
+        % Procedura koja izraèunava globalne derivacije pomoæu Jacobi-eve
+        % matrice i lokalnih derivacija funkcija oblika
+        
+        [dxshape4lin,dyshape4lin]=globderiv(invJacob,drshape4lin,dsshape4lin);
+        
+        %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-
-% Attempt at copying the above approach in a configurational force setup
-
-for jj=1:nEL
-    
-    Force = zeros ( 8 , 1 );
-            
-        for ii=1:rlength
+        Conf_test = Eshelby_tenzor3 (  1 , 1 , 1 ) * dxshape4lin + Eshelby_tenzor3 (  1 , 2 , 1 ) * dyshape4lin;
         
-            [shape4lin,drshape4lin,dsshape4lin] = iso4lin(rgauss(ii), sgauss(ii));
-       
-            Jacobiana = jacobiana ( ELX1 ( :, jj ), ELY1 ( : , jj ) , drshape4lin , dsshape4lin );
-            invJacob = inv ( Jacobiana );
-            detJacob = det ( Jacobiana );
-        
-            [dxshape4lin,dyshape4lin] = globderiv (invJacob,drshape4lin,dsshape4lin);      
-    
-            Bmatrica2 = formiranjeBmatrice_pstrain2_Eshelby ( dxshape4lin , dyshape4lin );
-        
-            Force = Force  + Bmatrica2' * [ Naprezanja(ii,3:5) Naprezanja(ii,5) ]' * wgauss (ii) * detJacob * tgrede ;
-                        
-        end;
-    
-    % Postavljanje gotove lokalne matrice krutosti na redno mjesto
-    % elementa. Dobivamo listu lokalnih matrica krutosti dugacku kao ukupni
-    % broj konacnih elemenata
-    
-    Force_backwards (:,jj) = Force;
-    
-end;
-
+end
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % Result visualisation - needs improvement
