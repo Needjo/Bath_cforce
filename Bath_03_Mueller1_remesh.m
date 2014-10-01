@@ -1,0 +1,507 @@
+% Configurational forces 2d problem - Bath 30.09.2014
+% Multi-element solution
+
+clear; 
+clc;
+close all;
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% Input parameters
+
+lgrede = 20;
+hgrede = 20;
+tgrede = 1;
+
+nlelemenata = 4;
+nhelemenata = 4;
+
+E = 1000;
+Nu = 0.3;
+
+G = E/(2*(1+Nu));
+
+p0 = -150;
+
+c = 0.01;
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% Finite element mesh creation
+
+xy = pravokutni_mesh4kutni( lgrede , hgrede , nlelemenata , nhelemenata );
+[ELX , ELY , EL ] = formiranje_4kutnihelemenata( xy, nlelemenata, nhelemenata );
+
+ELX1 = ELX(2:5,:);
+ELY1 = ELY(2:5,:);
+
+ELXPLOT = [ELX(2:5,:);ELX(2,:)];
+ELYPLOT = [ELY(2:5,:);ELY(2,:)];
+
+
+nC = length ( xy );
+nEL = nlelemenata * nhelemenata;
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% Defining non-boundary nodes which are considered in configurational
+% force based mesh improvement
+
+Internal_node = [];
+
+for ii = 1 : nC
+    
+    if xy ( 1 , ii ) ~= 0 && xy ( 1 , ii ) ~= lgrede && xy ( 2 , ii ) ~= 0 && xy ( 2 , ii ) ~= hgrede
+        
+        Internal_node = [ Internal_node ii ];
+        
+    end;
+    
+end;
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% Local stiffness matrix formulation
+
+% Plane strain state for isotropic linear elastic material
+Smatrica = [ (1-Nu^2)/E -Nu*(1+Nu)/E 0; -Nu*(1+Nu)/E (1-Nu^2)/E 0; 0 0 1/G ];
+Cmatrica = inv(Smatrica);
+
+% % Plane stress state for isotropic linear elastic material
+% Cmatrica = ( E / ( 1 - Nu^2 ) ) * [ 1 Nu 0; Nu 1 0; 0 0 (1-Nu)/2 ]; 
+
+
+% Gaussian numerical quadrature rule - 2x2 integration
+[ rgauss, sgauss, wgauss ] = gaussquad2;
+rlength = length ( rgauss );
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% Beginning of loop over elements for mesh improvement - NODE SHIFTING
+
+
+for broj_koraka = 1 : 10000
+    
+    
+    if broj_koraka ~= 1
+        
+        Conf_force_internal = [];
+        
+        for ii = 1 : nC
+            
+            if sum ( ii == Internal_node ) == 1
+                
+                Conf_force_internal = [ Conf_force_internal; Conf_force(ii*2-1,1); Conf_force(ii*2,1) ];
+                
+            end;
+            
+        end;
+        
+        if norm ( Conf_force_internal ) <= 0.01
+            
+            disp('Konvergencija')
+            break
+            
+        end;
+        
+        xy ( : , Internal_node ) = xy ( : , Internal_node ) - c * reshape ( Conf_force_internal , 2 , length ( Internal_node ) );
+        
+        [ELX , ELY , EL ] = formiranje_4kutnihelemenata( xy, nlelemenata, nhelemenata );
+
+        ELX1 = ELX(2:5,:);
+        ELY1 = ELY(2:5,:);
+        
+    end;
+
+% Local stiffness matrix calculation - linear elastic isotropic elements
+Kl = zeros ( 8 , 8 , nEL );
+
+for jj=1:nEL
+    
+    Klok = zeros ( 8 , 8 );
+            
+        for ii=1:rlength
+        
+            [shape4lin,drshape4lin,dsshape4lin] = iso4lin(rgauss(ii), sgauss(ii));
+       
+            Jacobiana = jacobiana ( ELX1 ( :, jj ), ELY1 ( : , jj ) , drshape4lin , dsshape4lin );
+            invJacob = inv ( Jacobiana );
+            detJacob = det ( Jacobiana );
+        
+            [dxshape4lin,dyshape4lin] = globderiv (invJacob,drshape4lin,dsshape4lin);      
+    
+            Bmatrica = formiranjeBmatrice_pstrain2 ( dxshape4lin , dyshape4lin );
+        
+            Klok = Klok  + Bmatrica' * Cmatrica * Bmatrica * wgauss (ii) * detJacob * tgrede ;
+                        
+        end;
+    
+    % Postavljanje gotove lokalne matrice krutosti na redno mjesto
+    % elementa. Dobivamo listu lokalnih matrica krutosti dugacku kao ukupni
+    % broj konacnih elemenata
+    
+    Kl (:,:,jj) = Klok;
+    
+end;
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% Boundary values and loading definition
+% Rubni = rubniuvjet_ptest ( xy , nC );
+
+
+Rubni = [];
+for ii = 1 : nC
+    
+    if xy ( 2 , ii ) == 0
+        
+        Rubni = [ Rubni ii ];
+        
+        if xy ( 2 , ii ) == 0 && round (xy ( 1 , ii ) * 1000)/1000 == lgrede/2
+            
+            Rubni_x = ii;
+            
+        end;
+        
+    end;
+    
+end;
+  
+Rubni = [ Rubni ; ones(1,length(Rubni)) ; zeros(1,length(Rubni)) ];
+
+for ii = 1 : length (Rubni)
+    
+    if Rubni ( 1 , ii ) == Rubni_x
+        
+        Rubni ( 2 , ii ) = 0;
+        
+    end;
+    
+end;
+
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% Global stiffness matrix calculation
+
+Kg_prije = globmatkrutosti_brzi ( Kl , EL , nC );
+Kg = rubni_globmat_brzi ( Kg_prije , Rubni , nC );
+
+
+Sila = ( p0 * lgrede/2 ) / ceil(nlelemenata/2);
+
+FV = zeros ( 2 * nC , 1 );
+
+for ii = 1 : nC
+    
+    if round(xy ( 2 , ii )*1000)/1000 == hgrede 
+        
+        if round ( xy ( 1 , ii ) * 100 ) / 100 == lgrede / 4 || round ( xy ( 1 , ii ) * 100 ) / 100 == 3 * lgrede / 4
+            
+            FV ( 2 * ii , 1 ) = Sila/2;
+            
+        elseif round ( xy ( 1 , ii ) * 100 ) / 100 > lgrede / 4 && round ( xy ( 1 , ii ) * 100 ) / 100 < 3 * lgrede / 4
+            
+            FV ( 2 * ii , 1 ) = Sila;
+            
+        end;
+        
+    end;
+    
+end;
+            
+            
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% Linear equation system solver
+
+pomak = Kg \ FV;
+
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% Element strain and stress calculation for Gaussian points
+
+
+
+% Petlja za pozivanje svakog elementa
+napx_lista=[];
+napy_lista=[];
+napxy_lista=[];
+defx_lista=[];
+defy_lista=[];
+defxy_lista=[];
+Gauss_tocke=[];
+
+Def_grad_lista = [];
+
+for j=1:nEL
+    Pomaci_elementa = [];
+    Pomaci_elementa_x = [];
+    Pomaci_elementa_y = [];
+    for k=1:4
+        Pomaci_elementa = [ Pomaci_elementa; pomak(EL(1+k,j)*2-1) ];
+        Pomaci_elementa = [ Pomaci_elementa; pomak(EL(1+k,j)*2) ];
+        Pomaci_elementa_x = [Pomaci_elementa_x;pomak(EL(1+k,j)*2-1) ];
+        Pomaci_elementa_y = [Pomaci_elementa_y;pomak(EL(1+k,j)*2) ];
+    end;
+
+      
+      
+    % Petlja za provoðenje Gauss-ove integracije
+    
+    for i=1:rlength
+         
+        % Procedura koja poziva funckije oblika i njihove derivacije za
+        % pojedinu vrstu konaènih elemenata
+        
+        [shape4lin,drshape4lin,dsshape4lin] = iso4lin(rgauss(i), sgauss(i));
+        
+        % Procedura koja izraèunava Jacobi-evu matricu za transformaciju iz
+        % lokalnih derivacija u globalne
+        
+        Jacobiana = jacobiana ( ELX1 ( :, j ), ELY1 ( : , j ) , drshape4lin , dsshape4lin );
+        invJacob = inv ( Jacobiana );
+        detJacob = det ( Jacobiana );
+        
+        % Procedura koja izraèunava globalne derivacije pomoæu Jacobi-eve
+        % matrice i lokalnih derivacija funkcija oblika
+        
+        [dxshape4lin,dyshape4lin]=globderiv(invJacob,drshape4lin,dsshape4lin);
+        
+        % Procedura koja odreðuje B matricu sustava - matricu veze
+        % deformacija i pomaka
+        
+        Bmatrica = formiranjeBmatrice_pstrain2 ( dxshape4lin , dyshape4lin );
+        
+        def_lok = Bmatrica * Pomaci_elementa;
+        nap_lok = Cmatrica * def_lok;
+        
+        glob_Gauss_tocke = shape4lin * [ ELX(2:5,j), ELY(2:5,j) ];
+        
+        napx_lista = [ napx_lista; nap_lok(1) ];
+        napy_lista = [ napy_lista; nap_lok(2) ];
+        napxy_lista = [ napxy_lista; nap_lok(3) ];
+        defx_lista = [ defx_lista; def_lok(1) ];
+        defy_lista = [ defy_lista; def_lok(2) ];
+        defxy_lista = [ defxy_lista; def_lok(3) ];
+        Gauss_tocke = [ Gauss_tocke; glob_Gauss_tocke ];
+        
+        Def_grad_lista = [ Def_grad_lista ; 1+dxshape4lin*Pomaci_elementa_x,  dyshape4lin*Pomaci_elementa_x,dxshape4lin*Pomaci_elementa_y, 1+dyshape4lin*Pomaci_elementa_y  ];
+        
+    end;
+end;
+Naprezanja = [ Gauss_tocke, napx_lista, napy_lista, napxy_lista ];
+Deformacije = [ Gauss_tocke, defx_lista, defy_lista, defxy_lista ];
+
+
+% Total potential energy calculation for the whole problem and strain
+% energy calculation for each integration point
+Energy_FEM = 0.5 * pomak' * Kg * pomak - pomak' * FV;
+
+W = zeros ( rlength * nEL , 1 );
+
+for ii = 1 : rlength * nEL
+    
+    W ( ii ) = 0.5 * [Naprezanja(ii,3:5)] * [Deformacije(ii,3:5)]';
+
+end;
+
+% Calculation of the Eshelby stress in each integration point
+
+% Approach from Mueller2002 - linear elastic - take one
+Eshelby = zeros ( rlength * nEL , 1 );
+
+for ii = 1 : rlength * nEL
+    
+    Eshelby ( ii , 1 ) = W ( ii ) - Naprezanja ( ii , 3 ) * ( Def_grad_lista ( ii , 1 ) - 1 ) - Naprezanja ( ii , 5 ) * Def_grad_lista ( ii , 3 );
+    Eshelby ( ii , 2 ) = - Naprezanja ( ii , 3 ) * Def_grad_lista ( ii , 2 ) - Naprezanja ( ii , 5 ) * ( Def_grad_lista ( ii , 4 ) - 1 );
+    Eshelby ( ii , 3 ) = - Naprezanja ( ii , 5 ) * ( Def_grad_lista ( ii , 1 ) - 1 ) - Naprezanja ( ii , 4 ) * Def_grad_lista ( ii , 3 );
+    Eshelby ( ii , 4 ) = W ( ii ) - Naprezanja ( ii , 5 ) * Def_grad_lista ( ii , 2 ) - Naprezanja ( ii , 4 ) * ( Def_grad_lista ( ii , 4 ) - 1 );
+
+end;
+
+% Approach from Mueller2002 - linear elastic - take two
+
+Eshelby2 = zeros ( rlength * nEL , 1 );
+
+for ii = 1 : rlength * nEL
+    
+    Eshelby2 ( ii , 1 ) = W ( ii ) - Naprezanja ( ii , 3 ) * Def_grad_lista ( ii , 1 )  + Naprezanja ( ii , 3 ) - Naprezanja ( ii , 5 ) * Def_grad_lista ( ii , 3 );
+    Eshelby2 ( ii , 2 ) = - Naprezanja ( ii , 5 ) * Def_grad_lista ( ii , 1 ) + Naprezanja ( ii , 5 ) - Naprezanja ( ii , 4 ) * Def_grad_lista ( ii , 3 );
+    Eshelby2 ( ii , 3 ) = - Naprezanja ( ii , 3 ) * Def_grad_lista ( ii , 2 ) - Naprezanja ( ii , 5 ) * Def_grad_lista ( ii , 4 ) + Naprezanja ( ii , 5 );
+    Eshelby2 ( ii , 4 ) = W ( ii ) - Naprezanja ( ii , 5 ) * Def_grad_lista ( ii , 2 ) - Naprezanja ( ii , 4 ) * Def_grad_lista ( ii , 4 ) + Naprezanja ( ii , 4 );
+
+end;
+
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% Attempt at obtaining nodal forces from stress and inteprolation matrices
+
+Conf_force_local = zeros ( 8 , nEL );
+
+for jj=1:nEL
+    
+    Conf_force = zeros ( 8 , 1 );
+            
+        for ii=1:rlength
+        
+            [shape4lin,drshape4lin,dsshape4lin] = iso4lin(rgauss(ii), sgauss(ii));
+       
+            Jacobiana = jacobiana ( ELX1 ( :, jj ), ELY1 ( : , jj ) , drshape4lin , dsshape4lin );
+            invJacob = inv ( Jacobiana );
+            detJacob = det ( Jacobiana );
+        
+            [dxshape4lin,dyshape4lin] = globderiv (invJacob,drshape4lin,dsshape4lin);      
+    
+            Bmatrica2 = formiranjeBmatrice_pstrain2_Eshelby ( dxshape4lin , dyshape4lin );
+        
+            Conf_force = Conf_force  + Bmatrica2' * [ Eshelby2((jj-1)*rlength+ii,1) Eshelby2((jj-1)*rlength+ii,4) Eshelby2((jj-1)*rlength+ii,2:3) ]' * wgauss (ii) * detJacob * tgrede ;
+                        
+        end;
+    
+    % Postavljanje gotove lokalne matrice krutosti na redno mjesto
+    % elementa. Dobivamo listu lokalnih matrica krutosti dugacku kao ukupni
+    % broj konacnih elemenata
+    
+    Conf_force_local (:,jj) = Conf_force;
+    
+end;
+
+
+% Attempt at copying the above approach in a configurational force setup
+
+Force_backwards_local = zeros ( 8 , nEL );
+
+for jj=1:nEL
+    
+    Force = zeros ( 8 , 1 );
+            
+        for ii=1:rlength
+        
+            [shape4lin,drshape4lin,dsshape4lin] = iso4lin(rgauss(ii), sgauss(ii));
+       
+            Jacobiana = jacobiana ( ELX1 ( :, jj ), ELY1 ( : , jj ) , drshape4lin , dsshape4lin );
+            invJacob = inv ( Jacobiana );
+            detJacob = det ( Jacobiana );
+        
+            [dxshape4lin,dyshape4lin] = globderiv (invJacob,drshape4lin,dsshape4lin);      
+    
+            Bmatrica2 = formiranjeBmatrice_pstrain2_Eshelby ( dxshape4lin , dyshape4lin );
+        
+            Force = Force  + Bmatrica2' * [ Naprezanja((jj-1)*rlength+ii,3:5) Naprezanja((jj-1)*rlength+ii,5) ]' * wgauss (ii) * detJacob * tgrede ;
+                        
+        end;
+    
+    % Postavljanje gotove lokalne matrice krutosti na redno mjesto
+    % elementa. Dobivamo listu lokalnih matrica krutosti dugacku kao ukupni
+    % broj konacnih elemenata
+    
+    Force_backwards_local (:,jj) = Force;
+    
+end;
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% Assembly of configurational forces + assembly of physical forces as a check
+
+Conf_force = zeros ( 2 * nC , 1 );
+
+for j = 1 : nEL
+    
+    Conf_force ( 2 * EL ( 2 , j ) - 1 , 1 ) = Conf_force ( 2 * EL ( 2 , j ) - 1 ) + Conf_force_local( 1 , j );
+    Conf_force ( 2 * EL ( 2 , j ) , 1 ) = Conf_force ( 2 * EL ( 2 , j ) ) + Conf_force_local( 2 , j );
+    Conf_force ( 2 * EL ( 3 , j ) - 1 , 1 ) = Conf_force ( 2 * EL ( 3 , j ) - 1 ) + Conf_force_local( 3 , j );
+    Conf_force ( 2 * EL ( 3 , j ) , 1 ) = Conf_force ( 2 * EL ( 3 , j ) ) + Conf_force_local( 4 , j );
+    Conf_force ( 2 * EL ( 4 , j ) - 1 , 1 ) = Conf_force ( 2 * EL ( 4 , j ) - 1 ) + Conf_force_local( 5 , j );
+    Conf_force ( 2 * EL ( 4 , j ) , 1 ) = Conf_force ( 2 * EL ( 4 , j ) ) + Conf_force_local( 6 , j );
+    Conf_force ( 2 * EL ( 5 , j ) - 1 , 1 ) = Conf_force ( 2 * EL ( 5 , j ) - 1 ) + Conf_force_local( 7 , j );
+    Conf_force ( 2 * EL ( 5 , j ) , 1 ) = Conf_force ( 2 * EL ( 5 , j ) ) + Conf_force_local( 8 , j );
+    
+end;
+
+
+Force_backwards = zeros ( 2 * nC , 1 );
+
+for j = 1 : nEL
+    
+    Force_backwards ( 2 * EL ( 2 , j ) - 1 , 1 ) = Force_backwards ( 2 * EL ( 2 , j ) - 1 ) + Force_backwards_local( 1 , j );
+    Force_backwards ( 2 * EL ( 2 , j ) , 1 ) = Force_backwards ( 2 * EL ( 2 , j ) ) + Force_backwards_local( 2 , j );
+    Force_backwards ( 2 * EL ( 3 , j ) - 1 , 1 ) = Force_backwards ( 2 * EL ( 3 , j ) - 1 ) + Force_backwards_local( 3 , j );
+    Force_backwards ( 2 * EL ( 3 , j ) , 1 ) = Force_backwards ( 2 * EL ( 3 , j ) ) + Force_backwards_local( 4 , j );
+    Force_backwards ( 2 * EL ( 4 , j ) - 1 , 1 ) = Force_backwards ( 2 * EL ( 4 , j ) - 1 ) + Force_backwards_local( 5 , j );
+    Force_backwards ( 2 * EL ( 4 , j ) , 1 ) = Force_backwards ( 2 * EL ( 4 , j ) ) + Force_backwards_local( 6 , j );
+    Force_backwards ( 2 * EL ( 5 , j ) - 1 , 1 ) = Force_backwards ( 2 * EL ( 5 , j ) - 1 ) + Force_backwards_local( 7 , j );
+    Force_backwards ( 2 * EL ( 5 , j ) , 1 ) = Force_backwards ( 2 * EL ( 5 , j ) ) + Force_backwards_local( 8 , j );
+    
+end;
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% Popisi varijabli za post-procesiranje
+
+xy_popis ( : , : , broj_koraka ) = xy;
+pomak_popis ( : , broj_koraka ) = pomak;
+Conf_popis ( : , broj_koraka ) = Conf_force;
+Energy_FEM_popis ( broj_koraka ) = Energy_FEM;
+
+if broj_koraka ~= 1
+norma (broj_koraka)=norm(Conf_force_internal);
+end;
+
+end;
+
+
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% Result visualisation - needs improvement
+
+[ xyDEF , xyPLOT ] = uredjenje_deformacija ( xy , pomak );
+
+for i = 1:nEL
+    ELXPLOT2 ( 1 , i ) = EL ( 1 , i );
+    ELXPLOT2 ( 2 , i ) = xyPLOT ( 1, EL ( 2 , i ) );
+    ELXPLOT2 ( 3 , i ) = xyPLOT ( 1, EL ( 3 , i ) );
+    ELXPLOT2 ( 5 , i ) = xyPLOT ( 1, EL ( 5 , i ) );
+    ELXPLOT2 ( 4 , i ) = xyPLOT ( 1, EL ( 4 , i ) );
+end;
+for i = 1:nEL
+    ELYPLOT2 ( 1 , i ) = EL ( 1 , i );
+    ELYPLOT2 ( 2 , i ) = xyPLOT ( 2, EL ( 2 , i ) );
+    ELYPLOT2 ( 3 , i ) = xyPLOT ( 2, EL ( 3 , i ) );
+    ELYPLOT2 ( 5 , i ) = xyPLOT ( 2, EL ( 5 , i ) );
+    ELYPLOT2 ( 4 , i ) = xyPLOT ( 2, EL ( 4 , i ) );
+end;
+
+ELX1PLOT = ELXPLOT2 ( 2:5 , : );
+ELY1PLOT = ELYPLOT2 ( 2:5 , : );
+
+figure
+hold on
+plot(ELXPLOT,ELYPLOT,'k-')
+
+[ELX , ELY , EL ] = formiranje_4kutnihelemenata( xy, nlelemenata, nhelemenata );
+
+ELX1 = ELX(2:5,:);
+ELY1 = ELY(2:5,:);
+
+ELXPLOT1 = [ELX(2:5,:);ELX(2,:)];
+ELYPLOT1 = [ELY(2:5,:);ELY(2,:)];
+
+plot(ELXPLOT1,ELYPLOT1,'r--')
+hold off
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
