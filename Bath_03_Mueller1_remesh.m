@@ -1,6 +1,9 @@
 % Configurational forces 2d problem - Bath 30.09.2014
-% Multi-element solution
-tic
+% Mesh improvement by configurational force analysis. Example problem from
+% Mueller R., Kolling S., Gross D., "On configurational forces in the
+% context of the finite element method" - example 4.1.1.Block under
+% pressure. Procedure author: Nikola Lustig, mag.ing.aedif.
+
 clear; 
 clc;
 close all;
@@ -24,6 +27,7 @@ p0 = -150;
 
 c = 0.01;
 max_koraka = 10000;
+tol = 0.01;
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % Finite element mesh creation
@@ -59,8 +63,6 @@ end;
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-% Local stiffness matrix formulation
-
 % Plane strain state for isotropic linear elastic material
 Smatrica = [ (1-Nu^2)/E -Nu*(1+Nu)/E 0; -Nu*(1+Nu)/E (1-Nu^2)/E 0; 0 0 1/G ];
 Cmatrica = inv(Smatrica);
@@ -133,7 +135,7 @@ end;
             
   
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-% Beginning of loop over elements for mesh improvement - NODE SHIFTING
+% Preallocation of data for analysis
 
 Naprezanja = zeros ( nEL * rlength , 5 );
 Deformacije = zeros ( nEL * rlength , 5 );
@@ -143,6 +145,7 @@ Eshelby2 = zeros ( nEL * rlength , 4 );
 shape4lin_save = zeros ( nEL * rlength , 4 );
 dxshape4lin_save = zeros ( nEL * rlength , 4 );
 dyshape4lin_save = zeros ( nEL * rlength , 4 );
+detJacob_save = zeros ( nEL * rlength , 1 );
 Bmatrica_save = zeros ( nEL * rlength , 24 );
 Bmatrica2_save = zeros ( nEL * rlength , 32 );
 Pomaci_elementa = zeros ( 8 , 1 );
@@ -153,15 +156,19 @@ Energy_FEM_popis = zeros ( 1 , max_koraka );
 norma_popis = zeros ( 1 , max_koraka );
 Oduzmi = 0;
 
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% Beginning of loop over elements for mesh improvement - NODE SHIFTING
 
 for broj_koraka = 1 : max_koraka
     
+    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    % Checking convergence criteria and mesh adaptation
     
     if broj_koraka ~= 1
         
         norma = norm ( Conf_force(sort([2*Internal_node-1,2*Internal_node])) );
         
-        if norma <= 0.01
+        if norma <= tol
             
             disp('Konvergencija')
             Oduzmi = 1;
@@ -183,8 +190,11 @@ for broj_koraka = 1 : max_koraka
         end;
         
     end;
-
+    
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % Local stiffness matrix calculation - linear elastic isotropic elements
+% Shape functions, their derivatives and Bmatrices saved for later use
+
 Kl = zeros ( 8 , 8 , nEL );
 
 for jj=1:nEL
@@ -215,10 +225,6 @@ for jj=1:nEL
                         
         end;
     
-    % Postavljanje gotove lokalne matrice krutosti na redno mjesto
-    % elementa. Dobivamo listu lokalnih matrica krutosti dugacku kao ukupni
-    % broj konacnih elemenata
-    
     Kl (:,:,jj) = Klok;
     
 end;
@@ -238,24 +244,20 @@ pomak = Kg \ FV;
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-% Element strain and stress calculation for Gaussian points
+% Element strain, stress, Eshelby stress and configurational force
+% calculation for Gaussian points
 
 Conf_force_local = zeros ( 8 , nEL );
 
-% Petlja za pozivanje svakog elementa
-% napx_lista=[];
-% napy_lista=[];
-% napxy_lista=[];
-% defx_lista=[];
-% defy_lista=[];
-% defxy_lista=[];
-% Gauss_tocke=[];
-
-% Def_grad_lista = [];
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% Loop over elements
 
 for j=1:nEL
     
     Conf_force = zeros ( 8 , 1 );
+    
+    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    % Local displacements for each element are defined
     
     for k = 1 : 4
         
@@ -264,85 +266,58 @@ for j=1:nEL
         
     end;
 
-    % Petlja za provoðenje Gauss-ove integracije
+    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    % Loop over integration points
     
     for i=1:rlength
         
         hh = ( j - 1 ) * rlength + i;
-         
-        % Procedura koja poziva funckije oblika i njihove derivacije za
-        % pojedinu vrstu konaènih elemenata
         
-%         [shape4lin,drshape4lin,dsshape4lin] = iso4lin(rgauss(i), sgauss(i));
-        
-        % Procedura koja izraèunava Jacobi-evu matricu za transformaciju iz
-        % lokalnih derivacija u globalne
-        
-%         Jacobiana = jacobiana ( ELX1 ( :, j ), ELY1 ( : , j ) , drshape4lin , dsshape4lin );
-%         invJacob = inv ( Jacobiana );
-%         detJacob = det ( Jacobiana );
-        
-        % Procedura koja izraèunava globalne derivacije pomoæu Jacobi-eve
-        % matrice i lokalnih derivacija funkcija oblika
-        
-%         [dxshape4lin,dyshape4lin]=globderiv(invJacob,drshape4lin,dsshape4lin);
-        
-        % Procedura koja odreðuje B matricu sustava - matricu veze
-        % deformacija i pomaka
-        
-%         Bmatrica = formiranjeBmatrice_pstrain2 ( dxshape4lin , dyshape4lin );
-        
+        %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+        % Local stress and strain vectors with integration point locations
+
         def_lok = reshape ( Bmatrica_save(hh,:) , 3 , 8 ) * Pomaci_elementa;
         nap_lok = Cmatrica * def_lok;
         
         glob_Gauss_tocke = shape4lin_save ( hh , : ) * [ ELX1(:,j), ELY1(:,j) ];
-        
-%         napx_lista = [ napx_lista; nap_lok(1) ];
-%         napy_lista = [ napy_lista; nap_lok(2) ];
-%         napxy_lista = [ napxy_lista; nap_lok(3) ];
-%         defx_lista = [ defx_lista; def_lok(1) ];
-%         defy_lista = [ defy_lista; def_lok(2) ];
-%         defxy_lista = [ defxy_lista; def_lok(3) ];
-%         Gauss_tocke = [ Gauss_tocke; glob_Gauss_tocke ];
 
         Naprezanja ( hh , : ) = [ glob_Gauss_tocke , nap_lok' ];
         Deformacije ( hh , : ) = [ glob_Gauss_tocke , def_lok' ];
+        
+        %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+        % Deformation gradient and strain energy density in integration
+        % point
+        
         Def_grad_lista ( hh , : ) = [ 1+dxshape4lin_save(hh,:)*Pomaci_elementa(1:2:8),  dyshape4lin_save(hh,:)*Pomaci_elementa(1:2:8) , dxshape4lin_save(hh,:)*Pomaci_elementa(2:2:8) , 1+dyshape4lin_save(hh,:)*Pomaci_elementa(2:2:8) ];
-
         W ( hh , : ) = 0.5 * Naprezanja( hh , 3:5 ) * Deformacije( hh , 3:5 )';
 
-%         Def_grad_lista = [ Def_grad_lista ; 1+dxshape4lin*Pomaci_elementa_x,  dyshape4lin*Pomaci_elementa_x,dxshape4lin*Pomaci_elementa_y, 1+dyshape4lin*Pomaci_elementa_y  ];
+        %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+        % Eshelby stress in integration point
 
         Eshelby2 ( hh , 1 ) = W ( hh ) - Naprezanja ( hh , 3 ) * Def_grad_lista ( hh , 1 )  + Naprezanja ( hh , 3 ) - Naprezanja ( hh , 5 ) * Def_grad_lista ( hh , 3 );
         Eshelby2 ( hh , 2 ) = - Naprezanja ( hh , 5 ) * Def_grad_lista ( hh , 1 ) + Naprezanja ( hh , 5 ) - Naprezanja ( hh , 4 ) * Def_grad_lista ( hh , 3 );
         Eshelby2 ( hh , 3 ) = - Naprezanja ( hh , 3 ) * Def_grad_lista ( hh , 2 ) - Naprezanja ( hh , 5 ) * Def_grad_lista ( hh , 4 ) + Naprezanja ( hh , 5 );
         Eshelby2 ( hh , 4 ) = W ( hh ) - Naprezanja ( hh , 5 ) * Def_grad_lista ( hh , 2 ) - Naprezanja ( hh , 4 ) * Def_grad_lista ( hh , 4 ) + Naprezanja ( hh , 4 );
 
+        %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+        % Configuration force Gaussian integration
         
         Conf_force = Conf_force  + reshape(Bmatrica2_save(hh,:),4,8)' * [ Eshelby2((j-1)*rlength+i,1) Eshelby2((j-1)*rlength+i,4) Eshelby2((j-1)*rlength+i,2:3) ]' * wgauss (i) * detJacob_save ( hh ) * tgrede ;
 
 
     end;
     
+    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    % Configurational forces for each element - ready for assembling
+        
     Conf_force_local (:,j) = Conf_force;
     
 end;
-% Naprezanja = [ Gauss_tocke, napx_lista, napy_lista, napxy_lista ];
-% Deformacije = [ Gauss_tocke, defx_lista, defy_lista, defxy_lista ];
-
 
 % Total potential energy calculation for the whole problem and strain
 % energy calculation for each integration point
 
 Energy_FEM = 0.5 * pomak' * Kg * pomak - pomak' * FV;
-
-% W = zeros ( rlength * nEL , 1 );
-% 
-% for ii = 1 : rlength * nEL
-%     
-%     W ( ii ) = 0.5 * [Naprezanja(ii,3:5)] * [Deformacije(ii,3:5)]';
-% 
-% end;
 
 % Calculation of the Eshelby stress in each integration point
 
@@ -371,77 +346,8 @@ Energy_FEM = 0.5 * pomak' * Kg * pomak - pomak' * FV;
 % % % 
 % % % end;
 
-
-
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-% Attempt at obtaining nodal forces from stress and inteprolation matrices
-
-% % Conf_force_local = zeros ( 8 , nEL );
-% % 
-% % for jj=1:nEL
-% %     
-% %     Conf_force = zeros ( 8 , 1 );
-% %             
-% %         for ii=1:rlength
-% %         
-% %             [shape4lin,drshape4lin,dsshape4lin] = iso4lin(rgauss(ii), sgauss(ii));
-% %        
-% %             Jacobiana = jacobiana ( ELX1 ( :, jj ), ELY1 ( : , jj ) , drshape4lin , dsshape4lin );
-% %             invJacob = inv ( Jacobiana );
-% %             detJacob = det ( Jacobiana );
-% %         
-% %             [dxshape4lin,dyshape4lin] = globderiv (invJacob,drshape4lin,dsshape4lin);      
-% %     
-% %             Bmatrica2 = formiranjeBmatrice_pstrain2_Eshelby ( dxshape4lin , dyshape4lin );
-% %         
-% %             Conf_force = Conf_force  + Bmatrica2' * [ Eshelby2((jj-1)*rlength+ii,1) Eshelby2((jj-1)*rlength+ii,4) Eshelby2((jj-1)*rlength+ii,2:3) ]' * wgauss (ii) * detJacob * tgrede ;
-% %                         
-% %         end;
-% %     
-% %     % Postavljanje gotove lokalne matrice krutosti na redno mjesto
-% %     % elementa. Dobivamo listu lokalnih matrica krutosti dugacku kao ukupni
-% %     % broj konacnih elemenata
-% %     
-% %     Conf_force_local (:,jj) = Conf_force;
-% %     
-% % end;
-
-
-% Attempt at copying the above approach in a configurational force setup
-
-% % % Force_backwards_local = zeros ( 8 , nEL );
-% % % 
-% % % for jj=1:nEL
-% % %     
-% % %     Force = zeros ( 8 , 1 );
-% % %             
-% % %         for ii=1:rlength
-% % %         
-% % %             [shape4lin,drshape4lin,dsshape4lin] = iso4lin(rgauss(ii), sgauss(ii));
-% % %        
-% % %             Jacobiana = jacobiana ( ELX1 ( :, jj ), ELY1 ( : , jj ) , drshape4lin , dsshape4lin );
-% % %             invJacob = inv ( Jacobiana );
-% % %             detJacob = det ( Jacobiana );
-% % %         
-% % %             [dxshape4lin,dyshape4lin] = globderiv (invJacob,drshape4lin,dsshape4lin);      
-% % %     
-% % %             Bmatrica2 = formiranjeBmatrice_pstrain2_Eshelby ( dxshape4lin , dyshape4lin );
-% % %         
-% % %             Force = Force  + Bmatrica2' * [ Naprezanja((jj-1)*rlength+ii,3:5) Naprezanja((jj-1)*rlength+ii,5) ]' * wgauss (ii) * detJacob * tgrede ;
-% % %                         
-% % %         end;
-% % %     
-% % %     % Postavljanje gotove lokalne matrice krutosti na redno mjesto
-% % %     % elementa. Dobivamo listu lokalnih matrica krutosti dugacku kao ukupni
-% % %     % broj konacnih elemenata
-% % %     
-% % %     Force_backwards_local (:,jj) = Force;
-% % %     
-% % % end;
-
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-% Assembly of configurational forces + assembly of physical forces as a check
+% Assembly of configurational forces 
 
 Conf_force = zeros ( 2 * nC , 1 );
 
@@ -458,25 +364,8 @@ for j = 1 : nEL
     
 end;
 
-
-% % % Force_backwards = zeros ( 2 * nC , 1 );
-% % % 
-% % % for j = 1 : nEL
-% % %     
-% % %     Force_backwards ( 2 * EL ( 2 , j ) - 1 , 1 ) = Force_backwards ( 2 * EL ( 2 , j ) - 1 ) + Force_backwards_local( 1 , j );
-% % %     Force_backwards ( 2 * EL ( 2 , j ) , 1 ) = Force_backwards ( 2 * EL ( 2 , j ) ) + Force_backwards_local( 2 , j );
-% % %     Force_backwards ( 2 * EL ( 3 , j ) - 1 , 1 ) = Force_backwards ( 2 * EL ( 3 , j ) - 1 ) + Force_backwards_local( 3 , j );
-% % %     Force_backwards ( 2 * EL ( 3 , j ) , 1 ) = Force_backwards ( 2 * EL ( 3 , j ) ) + Force_backwards_local( 4 , j );
-% % %     Force_backwards ( 2 * EL ( 4 , j ) - 1 , 1 ) = Force_backwards ( 2 * EL ( 4 , j ) - 1 ) + Force_backwards_local( 5 , j );
-% % %     Force_backwards ( 2 * EL ( 4 , j ) , 1 ) = Force_backwards ( 2 * EL ( 4 , j ) ) + Force_backwards_local( 6 , j );
-% % %     Force_backwards ( 2 * EL ( 5 , j ) - 1 , 1 ) = Force_backwards ( 2 * EL ( 5 , j ) - 1 ) + Force_backwards_local( 7 , j );
-% % %     Force_backwards ( 2 * EL ( 5 , j ) , 1 ) = Force_backwards ( 2 * EL ( 5 , j ) ) + Force_backwards_local( 8 , j );
-% % %     
-% % % end;
-
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%
-% Popisi varijabli za post-procesiranje
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% Post-processing variables
 
 xy_popis ( : , : , broj_koraka ) = xy;
 pomak_popis ( : , broj_koraka ) = pomak;
@@ -484,7 +373,7 @@ Conf_popis ( : , broj_koraka ) = Conf_force;
 Energy_FEM_popis ( broj_koraka ) = Energy_FEM;
 
 if broj_koraka ~= 1
-    norma_popis (broj_koraka)=norma;
+    norma_popis ( broj_koraka ) = norma;
 end;
 
 end;
@@ -495,10 +384,11 @@ Conf_popis = Conf_popis ( : , 1 : broj_koraka - Oduzmi );
 Energy_FEM_popis = Energy_FEM_popis ( : , 1 : broj_koraka - Oduzmi );
 norma_popis = norma_popis ( : , 1 : broj_koraka - Oduzmi );
 
-
+ELX(2:5,:) = ELX1;
+ELY(2:5,:) = ELY1;
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-% Result visualisation - needs improvement
+% Results visualisation - needs improvement
 
 [ xyDEF , xyPLOT ] = uredjenje_deformacija ( xy , pomak );
 
@@ -535,11 +425,27 @@ ELYPLOT1 = [ELY(2:5,:);ELY(2,:)];
 plot(ELXPLOT1,ELYPLOT1,'r--')
 hold off
 
+figure 
+hold on
 
-toc
+for i = 1:nEL
+    ELXPLOT3 ( 1 , i ) = xyDEF ( 1, EL ( 2 , i ) );
+    ELXPLOT3 ( 2 , i ) = xyDEF ( 1, EL ( 3 , i ) );
+    ELXPLOT3 ( 4 , i ) = xyDEF ( 1, EL ( 5 , i ) );
+    ELXPLOT3 ( 3 , i ) = xyDEF ( 1, EL ( 4 , i ) );
+    ELXPLOT3 ( 5 , i ) = xyDEF ( 1, EL ( 2 , i ) );
+end;
+for i = 1:nEL
+    ELYPLOT3 ( 1 , i ) = xyDEF ( 2, EL ( 2 , i ) );
+    ELYPLOT3 ( 2 , i ) = xyDEF ( 2, EL ( 3 , i ) );
+    ELYPLOT3 ( 4 , i ) = xyDEF ( 2, EL ( 5 , i ) );
+    ELYPLOT3 ( 3 , i ) = xyDEF ( 2, EL ( 4 , i ) );
+    ELYPLOT3 ( 5 , i ) = xyDEF ( 2, EL ( 2 , i ) );
+end;
 
-
-
+plot(ELXPLOT3,ELYPLOT3,'k-')
+plot(ELXPLOT1,ELYPLOT1,'r--')
+hold off
 
 
 
