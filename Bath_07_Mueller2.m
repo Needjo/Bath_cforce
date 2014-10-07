@@ -15,8 +15,8 @@ lgrede = 10;
 hgrede = 10;
 tgrede = 1;
 
-nlelemenata = 100;
-nhelemenata = 100;
+nlelemenata = 6;
+nhelemenata = 6;
 
 E = 5*1000;
 Nu = 0.25;
@@ -35,7 +35,7 @@ p0 = 1000;
 tang_remesh = 1;
 
 c = 0.01;
-max_koraka = 1;
+max_koraka = 10000;
 tol = 0.01;
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
