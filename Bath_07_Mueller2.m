@@ -15,8 +15,8 @@ lgrede = 10;
 hgrede = 10;
 tgrede = 1;
 
-nlelemenata = 6;
-nhelemenata = 6;
+nlelemenata = 100;
+nhelemenata = 100;
 
 E = 5*1000;
 Nu = 0.25;
@@ -35,8 +35,8 @@ p0 = 1000;
 tang_remesh = 1;
 
 c = 0.01;
-max_koraka = 10000;
-tol = 0.02;
+max_koraka = 1;
+tol = 0.01;
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % Finite element mesh creation
@@ -117,7 +117,8 @@ Cmatrica = inv(Smatrica);
 
 
 % Gaussian numerical quadrature rule - 2x2 integration
-[ rgauss, sgauss, wgauss ] = gaussquad2;
+[ rgauss, sgauss, wgauss ] = gaussquad2_shift;
+% [ rgauss, sgauss, wgauss ] = gaussquad2;
 rlength = length ( rgauss );
 
 
@@ -201,10 +202,10 @@ for broj_koraka = 1 : max_koraka
             Oduzmi = 1;
 
     
-%             Usporedba_korak = [ Usporedba_korak ; broj_koraka ];
-%             Naprezanja_korak = [ Naprezanja_korak ; Naprezanja ];
-%             Deformacije_korak = [ Deformacije_korak ; Deformacije ];
-%             detJacob_korak = [ detJacob_korak ; detJacob_save ];
+            Usporedba_korak = cat(3,Usporedba_korak, broj_koraka-1);
+            Naprezanja_korak = cat(3,Naprezanja_korak , Naprezanja);
+            Deformacije_korak = cat(3,Deformacije_korak , Deformacije );
+            detJacob_korak = cat(3,detJacob_korak , detJacob_save );
     
 
             break
@@ -318,7 +319,7 @@ for j=1:nEL
 
         Naprezanja ( hh , : ) = [ glob_Gauss_tocke , nap_lok' ];
         Deformacije ( hh , : ) = [ glob_Gauss_tocke , def_lok' ];
-        
+%         error('aaa')
         %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
         % Deformation gradient and strain energy density in integration
         % point
@@ -417,12 +418,12 @@ if rem ( broj_koraka , 20 ) == 0
     
 end;
 
-if broj_koraka == 1 
+if broj_koraka == 1 || rem ( broj_koraka , 100 ) == 0
     
-    Usporedba_korak = [ Usporedba_korak ; broj_koraka ];
-    Naprezanja_korak = [ Naprezanja_korak ; Naprezanja ];
-    Deformacije_korak = [ Deformacije_korak ; Deformacije ];
-    detJacob_korak = [ detJacob_korak ; detJacob_save ];
+    Usporedba_korak = cat(3,Usporedba_korak, broj_koraka);
+    Naprezanja_korak = cat(3,Naprezanja_korak , Naprezanja);
+    Deformacije_korak = cat(3,Deformacije_korak , Deformacije );
+    detJacob_korak = cat(3,detJacob_korak , detJacob_save );
     
 end;
 
@@ -434,32 +435,79 @@ Conf_popis = Conf_popis ( : , 1 : broj_koraka - Oduzmi );
 Energy_FEM_popis = Energy_FEM_popis ( : , 1 : broj_koraka - Oduzmi );
 norma_popis = norma_popis ( : , 1 : broj_koraka - Oduzmi );
 
-Naprezanja_korak = [ Naprezanja_korak , zeros(length(Naprezanja_korak),4) ];
+Naprezanja_korak = cat(2,Naprezanja_korak , zeros(nEL*rlength,4,length(Usporedba_korak)));
 
-Naprezanja_korak ( : , 6 ) = (Naprezanja_korak(:,3) + Naprezanja_korak(:,4))/2 + sqrt( (Naprezanja_korak(:,3)-Naprezanja_korak(:,4)).^2/4 + Naprezanja_korak(:,5).^2 );
-Naprezanja_korak ( : , 7 ) = (Naprezanja_korak(:,3) + Naprezanja_korak(:,4))/2 - sqrt( (Naprezanja_korak(:,3)-Naprezanja_korak(:,4)).^2/4 + Naprezanja_korak(:,5).^2 );
-Naprezanja_korak ( : , 8 ) = atan ( 2 .* Naprezanja_korak(:,5) ./ (Naprezanja_korak(:,3)-Naprezanja_korak(:,4)) ) / 2;
-Naprezanja_korak ( : , 9 ) = atan ( 2 .* Naprezanja_korak(:,5) ./ (Naprezanja_korak(:,3)-Naprezanja_korak(:,4)) ) / 2 + pi/2;
-
-for ii = 1 : nEL
-    
-    detJacob_element ( ii ) = sum ( detJacob_korak ( (ii - 1) * rlength + 1 : ii * rlength ) );
-    
-end;
-
-[shape4lin,~,~] = iso4lin(0, 0);
+Naprezanja_korak ( : , 6 , : ) = (Naprezanja_korak(:,3,:) + Naprezanja_korak(:,4,:))/2 + sqrt( (Naprezanja_korak(:,3,:)-Naprezanja_korak(:,4,:)).^2/4 + Naprezanja_korak(:,5,:).^2 );
+Naprezanja_korak ( : , 7 , : ) = (Naprezanja_korak(:,3,:) + Naprezanja_korak(:,4,:))/2 - sqrt( (Naprezanja_korak(:,3,:)-Naprezanja_korak(:,4,:)).^2/4 + Naprezanja_korak(:,5,:).^2 );
+Naprezanja_korak ( : , 8 , : ) = atan ( 2 .* Naprezanja_korak(:,5,:) ./ (Naprezanja_korak(:,3,:)-Naprezanja_korak(:,4,:)) ) / 2;
+Naprezanja_korak ( : , 9 , : ) = atan ( 2 .* Naprezanja_korak(:,5,:) ./ (Naprezanja_korak(:,3,:)-Naprezanja_korak(:,4,:)) ) / 2 + pi/2;
 
 for ii = 1 : nEL
     
-    Naprezanja_element ( ii , 1:2 )  = shape4lin * [ ELX1(:,ii), ELY1(:,ii) ];
-    Naprezanja_element ( ii , 3 ) = sum( Naprezanja_korak ( (ii-1)*rlength+1:ii*rlength , 6 ) .* (detJacob_korak ( (ii - 1) * rlength + 1 : ii * rlength ) ) / detJacob_element ( ii ) );
-    Naprezanja_element ( ii , 4 ) = sum( Naprezanja_korak ( (ii-1)*rlength+1:ii*rlength , 7 ) .* (detJacob_korak ( (ii - 1) * rlength + 1 : ii * rlength ) ) / detJacob_element ( ii ) );
-    Naprezanja_element ( ii , 5 ) = sum( Naprezanja_korak ( (ii-1)*rlength+1:ii*rlength , 8 ) .* (detJacob_korak ( (ii - 1) * rlength + 1 : ii * rlength ) ) / detJacob_element ( ii ) );
-    Naprezanja_element ( ii , 6 ) = sum( Naprezanja_korak ( (ii-1)*rlength+1:ii*rlength , 9 ) .* (detJacob_korak ( (ii - 1) * rlength + 1 : ii * rlength ) ) / detJacob_element ( ii ) );
+    detJacob_element ( ii , : ) = sum ( detJacob_korak ( (ii - 1 ) * rlength + 1 : ii * rlength ) );
+    
+end;
+
+% % % % [shape4lin,~,~] = iso4lin(0, 0);
+% % % % 
+% % % % for ii = 1 : nEL
+% % % %     
+% % % %     Naprezanja_element ( ii , 1:2 , : )  = shape4lin * [ ELX1(:,ii), ELY1(:,ii) ];
+% % % %     Naprezanja_element ( ii , 3 , : ) = sum( Naprezanja_korak ( (ii-1)*rlength+1:ii*rlength , 6 , : ) .* (detJacob_korak ( (ii - 1) * rlength + 1 : ii * rlength , : ) ) / detJacob_element ( ii ) );
+% % % %     Naprezanja_element ( ii , 4 , : ) = sum( Naprezanja_korak ( (ii-1)*rlength+1:ii*rlength , 7 , : ) .* (detJacob_korak ( (ii - 1) * rlength + 1 : ii * rlength , : ) ) / detJacob_element ( ii ) );
+% % % %     Naprezanja_element ( ii , 5 , : ) = sum( Naprezanja_korak ( (ii-1)*rlength+1:ii*rlength , 8 , : ) .* (detJacob_korak ( (ii - 1) * rlength + 1 : ii * rlength , : ) ) / detJacob_element ( ii ) );
+% % % %     Naprezanja_element ( ii , 6 , : ) = sum( Naprezanja_korak ( (ii-1)*rlength+1:ii*rlength , 9 , : ) .* (detJacob_korak ( (ii - 1) * rlength + 1 : ii * rlength , : ) ) / detJacob_element ( ii ) );
+% % % % 
+% % % % end;
+
+
+% Stress recovery procedure from Boulder Colorado IFEM chapter 28
+% Stress interpolation from Gauss points to nodal points with additional
+% nodal stress smoothening
+
+Stress_recovery = zeros ( nEL*rlength , 5 , length(Usporedba_korak) );
+Recovery_matrix = [ 1+sqrt(3)/2 -1/2 1-sqrt(3)/2 -1/2; -1/2 1+sqrt(3)/2 -1/2 1-sqrt(3)/2; 1-sqrt(3)/2 -1/2 1+sqrt(3)/2 -1/2; -1/2 1-sqrt(3)/2 -1/2 1+sqrt(3)/2 ];
+
+for jj = 1 : length(Usporedba_korak)
+
+for ii = 1 : nEL
+    
+    Stress_recovery ( (ii-1)*rlength+1:ii*rlength , 1 , jj ) = Recovery_matrix * Naprezanja_korak ( (ii-1)*rlength+1:ii*rlength , 3 , jj );
+    Stress_recovery ( (ii-1)*rlength+1:ii*rlength , 2 , jj ) = Recovery_matrix * Naprezanja_korak ( (ii-1)*rlength+1:ii*rlength , 4 , jj );
+    Stress_recovery ( (ii-1)*rlength+1:ii*rlength , 3 , jj ) = Recovery_matrix * Naprezanja_korak ( (ii-1)*rlength+1:ii*rlength , 5 , jj );
+    Stress_recovery ( (ii-1)*rlength+1:ii*rlength , 4 , jj ) = Recovery_matrix * Naprezanja_korak ( (ii-1)*rlength+1:ii*rlength , 6 , jj );
+    Stress_recovery ( (ii-1)*rlength+1:ii*rlength , 5 , jj ) = Recovery_matrix * Naprezanja_korak ( (ii-1)*rlength+1:ii*rlength , 7 , jj );
 
 end;
 
+end;
 
+Stress_point = zeros ( nC , 5 , length(Usporedba_korak) );
+
+for jj = 1 : length(Usporedba_korak)
+
+for ii = 1 : nEL
+    
+    Stress_point ( EL ( 2 , ii ) , 1:5 , jj ) = Stress_point ( EL ( 2 , ii ) , 1:5 , jj ) + Stress_recovery ( (ii-1)*rlength+1 , : , jj );
+    Stress_point ( EL ( 3 , ii ) , 1:5 , jj ) = Stress_point ( EL ( 3 , ii ) , 1:5 , jj ) + Stress_recovery ( (ii-1)*rlength+2 , : , jj );
+    Stress_point ( EL ( 4 , ii ) , 1:5 , jj ) = Stress_point ( EL ( 4 , ii ) , 1:5 , jj ) + Stress_recovery ( (ii-1)*rlength+3 , : , jj );
+    Stress_point ( EL ( 5 , ii ) , 1:5 , jj ) = Stress_point ( EL ( 5 , ii ) , 1:5 , jj ) + Stress_recovery ( (ii-1)*rlength+4 , : , jj );
+    
+end;
+
+end;
+
+for ii = 1 : nC
+    
+    Node_occurence ( ii , 1 ) = sum ( sum ( ii == EL ( 2:5 , : ) ) );
+    
+end;
+
+for ii = 1 : nC
+    
+    Stress_point ( ii , : , : ) = Stress_point ( ii , : , : ) ./ Node_occurence ( ii );
+
+end;
 
 
 ELX(2:5,:) = ELX1;
@@ -525,8 +573,8 @@ plot(ELXPLOT3,ELYPLOT3,'k-')
 plot(ELXPLOT1,ELYPLOT1,'r--')
 hold off
 
-Q4_Conf_force_to_VTK(nC,nEL,xy_popis,EL,pomak_popis,length(Usporedba_korak),Naprezanja_element)
-% Q4_Conf_force_to_VTK_stress(nC,nEL,Naprezanja_korak(:,1:2)',EL,pomak_popis,length(Usporedba_korak),Naprezanja_element)
+Q4_Conf_force_to_VTK(nC,nEL,xy_popis(:,:,reshape(Usporedba_korak,1,length(Usporedba_korak))),EL,pomak_popis(:,reshape(Usporedba_korak,1,length(Usporedba_korak))),length(Usporedba_korak),Stress_point)
+
 
 
 
