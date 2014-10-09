@@ -1,4 +1,4 @@
-function Q4_mesh_SEN(lgrede,hgrede,notch,nlelemenata,nhelemenata)
+function [xy,EL]=Q4_mesh_SEN(lgrede,hgrede,notch,nlelemenata,nhelemenata)
 % Write a .txt file with single-edge notched geometry
 % A plate of length lgrede and height hgrede with a verticaal notch on the
 % bottom centre part of the beam is meshed. The mesh consists of a .txt
@@ -109,8 +109,6 @@ for jj = 1 : nhelemenata
     end;
     
 end;
-
-EL = [ 1 : nEL; EL ];
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % Printing the mesh out into a .txt file

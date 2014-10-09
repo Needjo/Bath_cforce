@@ -19,7 +19,7 @@ nlelemenata = 4;
 nhelemenata = 4;
 
 E = 1000;
-Nu = 0.25;
+Nu = 0.3;
 
 G = E/(2*(1+Nu));
 
