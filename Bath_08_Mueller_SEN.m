@@ -27,7 +27,7 @@ G = E/(2*(1+Nu));
 Lame_1 = E * Nu / ( ( 1 + Nu ) * ( 1 - 2 * Nu ) );
 
 % p0 defines a distributed load
-p0 = 1000;
+p0 = 100000;
 % Sila defines a concentrated load
 % Sila = -100;
 
@@ -36,7 +36,7 @@ p0 = 1000;
 tang_remesh = 1;
 
 c = 0.01;
-max_koraka = 10000;
+max_koraka = 1;
 tol = 0.01;
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -67,7 +67,7 @@ ELY1 = ELY(2:5,:);
 ELXPLOT = [ELX(2:5,:);ELX(2,:)];
 ELYPLOT = [ELY(2:5,:);ELY(2,:)];
 
-break
+
 % % % % % %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % % % % % % Defining non-boundary nodes which are considered in configurational
 % % % % % % force based mesh improvement
@@ -139,7 +139,7 @@ rlength = length ( rgauss );
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % Boundary values and loading definition
 
-Rubni = [ 1 , nlelemenata+2 , find(xy(1,:)==lgrede/2&&xy(2,:)==hgrede) ];
+Rubni = [ 1 , nlelemenata+2 , find(xy(1,:)==lgrede/2 & xy(2,:)==hgrede) ];
 Rubni = [ Rubni ; 1 1 0 ; 0 0 1 ];
 
 
@@ -163,13 +163,13 @@ FV = zeros ( 2 * nC , 1 );
 % Use this for a horizontal distributed load on both sides
 Sila = p0 / (nhelemenata);
 
-FV ( 2*(find(xy(1,:)==lgrede||xy(1,:)==0)) - 1 ) = Sila;
+FV ( 2*find(xy(1,:)==round(lgrede*100)/100) - 1 ) = Sila;
+FV ( 2*find(xy(1,:)==0) - 1 ) = -Sila;
+
 FV(2*nC - 1) = Sila/2;
 FV(2*(nlelemenata+2)-1)=Sila/2;
-FV(1) = Sila/2;
-FV(2*(nC-nlelemenata-1)-1) = Sila/2;
-
-
+FV(1) = -Sila/2;
+FV(2*(nC-nlelemenata)-1) = -Sila/2;
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% 
   
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -208,6 +208,8 @@ for broj_koraka = 1 : max_koraka
     % Checking convergence criteria and mesh adaptation
     
     if broj_koraka ~= 1
+        
+        error
         
         Cforce_operational = Conf_force;
         
@@ -559,7 +561,7 @@ figure
 hold on
 plot(ELXPLOT,ELYPLOT,'k-')
 
-[ELX , ELY , EL ] = formiranje_4kutnihelemenata( xy, nlelemenata, nhelemenata );
+% [ELX , ELY , EL ] = formiranje_4kutnihelemenata( xy, nlelemenata, nhelemenata );
 
 ELX1 = ELX(2:5,:);
 ELY1 = ELY(2:5,:);
@@ -589,7 +591,7 @@ for i = 1:nEL
 end;
 
 plot(ELXPLOT3,ELYPLOT3,'k-')
-plot(ELXPLOT1,ELYPLOT1,'r--')
+% plot(ELXPLOT1,ELYPLOT1,'r--')
 hold off
 
 Q4_Conf_force_to_VTK(nC,nEL,xy_popis(:,:,reshape(Usporedba_korak,1,length(Usporedba_korak))),EL,pomak_popis(:,reshape(Usporedba_korak,1,length(Usporedba_korak))),length(Usporedba_korak),Stress_point)
