@@ -22,8 +22,13 @@ E = 1000;
 Nu = 0.25;
 
 G = E/(2*(1+Nu));
+Lame_1 = E * Nu / ( ( 1 + Nu ) * ( 1 - 2 * Nu ) );
 
 p0 = -150;
+
+% Tangential movement of boundary nodes is allowed everywhere apart from
+% the loaded edge: 1 allowed, 0 not allowed
+tang_remesh = 1;
 
 c = 0.01;
 max_koraka = 10000;
@@ -45,11 +50,16 @@ ELYPLOT = [ELY(2:5,:);ELY(2,:)];
 nC = length ( xy );
 nEL = nlelemenata * nhelemenata;
 
+
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % Defining non-boundary nodes which are considered in configurational
 % force based mesh improvement
 
 Internal_node = [];
+External_node = [];
+Tangential_node_x = [];
+Tangential_node_y = [];
+Fixed_node = [];
 
 for ii = 1 : nC
     
@@ -61,6 +71,36 @@ for ii = 1 : nC
     
 end;
 
+if tang_remesh == 1
+    
+    for ii = 1 : nC
+        
+        if xy ( 1 , ii ) == 0 || xy ( 1 , ii ) == lgrede  
+            
+            Tangential_node_x = [ Tangential_node_x ii ];
+            
+        end;
+        
+        if xy ( 2 , ii ) == 0 || ( xy ( 2 , ii ) == hgrede && ~( round ( xy ( 1 , ii ) * 100 ) / 100 >= lgrede / 4 && round ( xy ( 1 , ii ) * 100 ) / 100 <= 3 * lgrede / 4 ) )
+            
+            Tangential_node_y = [ Tangential_node_y ii ];
+            
+        end;
+        
+    end;
+    
+end;
+    
+for ii = 1 : nC
+    
+    if ~(any(ii==Internal_node) || any(ii==Tangential_node_x) || any(ii==Tangential_node_y))
+        
+        Fixed_node = [ Fixed_node ii ];
+        
+    end;
+    
+end;
+    
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % Plane strain state for isotropic linear elastic material
@@ -166,7 +206,13 @@ for broj_koraka = 1 : max_koraka
     
     if broj_koraka ~= 1
         
-        norma = norm ( Conf_force(sort([2*Internal_node-1,2*Internal_node])) );
+        Cforce_operational = Conf_force;
+        
+        Cforce_operational ( [2*Tangential_node_x-1,2*Tangential_node_y,2*Fixed_node,2*Fixed_node-1], 1 ) = 0;    
+            
+        norma = norm ( Cforce_operational );
+        
+%         norma = norm ( Conf_force(sort([2*Internal_node-1,2*Internal_node])) );
         
         if norma <= tol
             
@@ -176,7 +222,8 @@ for broj_koraka = 1 : max_koraka
             
         end;
         
-        xy ( : , Internal_node ) = xy ( : , Internal_node ) - c * reshape ( Conf_force(sort([2*Internal_node-1,2*Internal_node])) , 2 , length ( Internal_node ) );
+        xy  = xy  - c * reshape ( Cforce_operational , 2 , length ( xy ) );
+%         xy ( : , Internal_node ) = xy ( : , Internal_node ) - c * reshape ( Conf_force(sort([2*Internal_node-1,2*Internal_node])) , 2 , length ( Internal_node ) );
         
         for i = 1:nEL
             ELX1 ( 1 , i ) = xy ( 1, EL ( 2 , i ) );
@@ -376,6 +423,12 @@ if broj_koraka ~= 1
     norma_popis ( broj_koraka ) = norma;
 end;
 
+if rem ( broj_koraka , 20 ) == 0
+    
+    disp ( [ 'Broj koraka: ', num2str(broj_koraka) , ' Norma konfiguracijskih sila: ', num2str(norma), ' Energija: ', num2str(Energy_FEM) ] )
+    
+end;
+
 end;
 
 xy_popis = xy_popis ( : , : , 1 : broj_koraka - Oduzmi );
@@ -383,6 +436,11 @@ pomak_popis = pomak_popis ( : , 1 : broj_koraka - Oduzmi );
 Conf_popis = Conf_popis ( : , 1 : broj_koraka - Oduzmi );
 Energy_FEM_popis = Energy_FEM_popis ( : , 1 : broj_koraka - Oduzmi );
 norma_popis = norma_popis ( : , 1 : broj_koraka - Oduzmi );
+
+
+% Normalized total potential energy
+Energy_FEM_normalized = Energy_FEM_popis .* G ./ ( p0^2 * lgrede * hgrede );
+
 
 ELX(2:5,:) = ELX1;
 ELY(2:5,:) = ELY1;
