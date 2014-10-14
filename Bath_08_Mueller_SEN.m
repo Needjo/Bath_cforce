@@ -67,6 +67,8 @@ ELY1 = ELY(2:5,:);
 ELXPLOT = [ELX(2:5,:);ELX(2,:)];
 ELYPLOT = [ELY(2:5,:);ELY(2,:)];
 
+Crack_tip = find ( round(xy(1,:)*100)/100 == lgrede/2 & round(xy(2,:)*100)/100 == notch );
+
 
 % % % % % %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % % % % % % Defining non-boundary nodes which are considered in configurational
@@ -533,6 +535,18 @@ end;
 
 ELX(2:5,:) = ELX1;
 ELY(2:5,:) = ELY1;
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% Some fracture mechanics characteristics
+
+% Analytical results
+
+Stress_intensity_factor_an = ( 1.12 - 0.23 * (notch/hgrede) + 10.56 * (notch/hgrede)^2 - 21.74 * (notch/hgrede)^3 + 30.42 * (notch/hgrede)^4 ) * p0 * sqrt( pi * notch );
+J_integral_an = Stress_intensity_factor_an^2 / E * ( 1 - Nu^2 );
+
+J_integral_num = -Conf_force ( Crack_tip * 2 );
+
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % Results visualisation - needs improvement
