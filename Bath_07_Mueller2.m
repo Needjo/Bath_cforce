@@ -18,7 +18,7 @@ tgrede = 1;
 nlelemenata = 6;
 nhelemenata = 6;
 
-E = 5*1000;
+E = 1000;
 Nu = 0.25;
 
 % Lame constants calculation for comparison with paper
@@ -26,7 +26,7 @@ G = E/(2*(1+Nu));
 Lame_1 = E * Nu / ( ( 1 + Nu ) * ( 1 - 2 * Nu ) );
 
 % p0 defines a distributed load
-p0 = 1000;
+p0 = 100;
 % Sila defines a concentrated load
 % Sila = -100;
 
@@ -35,7 +35,7 @@ p0 = 1000;
 tang_remesh = 1;
 
 c = 0.01;
-max_koraka = 10000;
+max_koraka = 3000;
 tol = 0.01;
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -66,7 +66,7 @@ Fixed_node = [];
 
 for ii = 1 : nC
     
-    if xy ( 1 , ii ) ~= 0 && xy ( 1 , ii ) ~= lgrede && xy ( 2 , ii ) ~= 0 && xy ( 2 , ii ) ~= hgrede
+    if xy ( 1 , ii ) ~= 0 && round(xy ( 1 , ii )*100)/100 ~= lgrede && xy ( 2 , ii ) ~= 0 && round( xy ( 2 , ii )*100)/100 ~= hgrede
         
         Internal_node = [ Internal_node ii ];
         
@@ -84,7 +84,7 @@ if tang_remesh == 1
             
         end;
         
-        if ( xy ( 2 , ii ) == 0 || xy ( 2 , ii ) == hgrede ) && xy ( 1 , ii ) ~= lgrede
+        if ( xy ( 2 , ii ) == 0 || round(xy ( 2 , ii )*100)/100 == hgrede ) && round(xy ( 1 , ii )*100)/100 ~= lgrede
             
             Tangential_node_y = [ Tangential_node_y ii ];
             
@@ -103,6 +103,8 @@ for ii = 1 : nC
     end;
     
 end;
+
+End_node = find ( xy ( 1 , : ) == lgrede & round ( xy ( 2 , : ) *100 )/100 == hgrede/2 );
     
 
 
@@ -147,7 +149,7 @@ FV = zeros ( 2 * nC , 1 );
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % Use this for a horizontal distributed load
-Sila = p0 / (nhelemenata);
+Sila = p0 * lgrede / (nhelemenata);
 FV ( 2*(nlelemenata+1:nlelemenata+1:nC) - 1 ) = Sila;
 FV(2*nC - 1) = Sila/2;
 FV(2*(nlelemenata+1)-1)=Sila/2;
@@ -513,6 +515,8 @@ end;
 ELX(2:5,:) = ELX1;
 ELY(2:5,:) = ELY1;
 
+pomak_popis_normalised = pomak_popis ( 2 * End_node - 1 , : ) * G / ( p0 * lgrede );
+
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % Results visualisation - needs improvement
 
@@ -573,7 +577,7 @@ plot(ELXPLOT3,ELYPLOT3,'k-')
 plot(ELXPLOT1,ELYPLOT1,'r--')
 hold off
 
-Q4_Conf_force_to_VTK(nC,nEL,xy_popis(:,:,reshape(Usporedba_korak,1,length(Usporedba_korak))),EL,pomak_popis(:,reshape(Usporedba_korak,1,length(Usporedba_korak))),length(Usporedba_korak),Stress_point)
+% Q4_Conf_force_to_VTK(nC,nEL,xy_popis(:,:,reshape(Usporedba_korak,1,length(Usporedba_korak))),EL,pomak_popis(:,reshape(Usporedba_korak,1,length(Usporedba_korak))),length(Usporedba_korak),Stress_point)
 
 
 
