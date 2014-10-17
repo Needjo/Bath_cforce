@@ -1,8 +1,9 @@
-% Configurational forces 2d problem - Bath 30.09.2014
+% Configurational forces 2d problem - Bath 14.10.2014
 % Mesh improvement by configurational force analysis. Example problem from
 % Mueller R., Kolling S., Gross D., "On configurational forces in the
 % context of the finite element method" - example 4.1.1.Block under
-% pressure. Procedure author: Nikola Lustig, mag.ing.aedif.
+% pressure. Manual sweep of the relevant node.
+% Procedure author: Nikola Lustig, mag.ing.aedif.
 
 clear; 
 clc;
@@ -26,13 +27,9 @@ Lame_1 = E * Nu / ( ( 1 + Nu ) * ( 1 - 2 * Nu ) );
 
 p0 = -100;
 
-% Tangential movement of boundary nodes is allowed everywhere apart from
-% the loaded edge: 1 allowed, 0 not allowed
-tang_remesh = 1;
-
-c = 0.05;
-max_koraka = 5000;
-tol = 0.0001;
+max_koraka = 1000;
+c = ( lgrede/2 ) / max_koraka;
+tol = 0.01;
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % Finite element mesh creation
@@ -52,54 +49,9 @@ nEL = nlelemenata * nhelemenata;
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-% Defining non-boundary nodes which are considered in configurational
-% force based mesh improvement
+% Defining the node which is sweeped through the domain
 
-Internal_node = [];
-External_node = [];
-Tangential_node_x = [];
-Tangential_node_y = [];
-Fixed_node = [];
-
-for ii = 1 : nC
-    
-    if xy ( 1 , ii ) ~= 0 && xy ( 1 , ii ) ~= lgrede && xy ( 2 , ii ) ~= 0 && xy ( 2 , ii ) ~= hgrede
-        
-        Internal_node = [ Internal_node ii ];
-        
-    end;
-    
-end;
-
-if tang_remesh == 1
-    
-    for ii = 1 : nC
-        
-        if xy ( 1 , ii ) == 0 || xy ( 1 , ii ) == lgrede  
-            
-            Tangential_node_x = [ Tangential_node_x ii ];
-            
-        end;
-        
-        if xy ( 2 , ii ) == 0 || ( xy ( 2 , ii ) == hgrede && ~( round ( xy ( 1 , ii ) * 100 ) / 100 >= lgrede / 4 && round ( xy ( 1 , ii ) * 100 ) / 100 <= 3 * lgrede / 4 ) )
-            
-            Tangential_node_y = [ Tangential_node_y ii ];
-            
-        end;
-        
-    end;
-    
-end;
-    
-for ii = 1 : nC
-    
-    if ~(any(ii==Internal_node) || any(ii==Tangential_node_x) || any(ii==Tangential_node_y))
-        
-        Fixed_node = [ Fixed_node ii ];
-        
-    end;
-    
-end;
+Tangential_node_x = [ 18 ];
     
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -118,8 +70,6 @@ rlength = length ( rgauss );
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % Boundary values and loading definition
-% Rubni = rubniuvjet_ptest ( xy , nC );
-
 
 Rubni = [];
 for ii = 1 : nC
@@ -197,7 +147,9 @@ norma_popis = zeros ( 1 , max_koraka );
 Oduzmi = 0;
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-% Beginning of loop over elements for mesh improvement - NODE SHIFTING
+% Beginning of loop over elements for mesh improvement - NODE SWEEPING
+
+xy ( 2 , Tangential_node_x ) = xy ( 2 , Tangential_node_x - nlelemenata );
 
 for broj_koraka = 1 : max_koraka
     
@@ -205,22 +157,8 @@ for broj_koraka = 1 : max_koraka
     % Checking convergence criteria and mesh adaptation
     
     if broj_koraka ~= 1
-        
-        Cforce_operational = Conf_force;
-        
-        Cforce_operational ( [2*Tangential_node_x-1,2*Tangential_node_y,2*Fixed_node,2*Fixed_node-1], 1 ) = 0;    
-            
-        norma = norm ( Cforce_operational );
-        
-        if norma <= tol
-            
-            disp('Konvergencija')
-            Oduzmi = 1;
-            break
-            
-        end;
-        
-        xy  = xy  - c * reshape ( Cforce_operational , 2 , length ( xy ) );
+                
+        xy ( 2 , Tangential_node_x ) = xy ( 2 , Tangential_node_x ) + c;
         
         for i = 1:nEL
             ELX1 ( 1 , i ) = xy ( 1, EL ( 2 , i ) );
@@ -338,10 +276,16 @@ for j=1:nEL
         %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
         % Eshelby stress in integration point
 
-        Eshelby2 ( hh , 1 ) = W ( hh ) - Naprezanja ( hh , 3 ) * Def_grad_lista ( hh , 1 )  + Naprezanja ( hh , 3 ) - Naprezanja ( hh , 5 ) * Def_grad_lista ( hh , 3 );
-        Eshelby2 ( hh , 2 ) = - Naprezanja ( hh , 5 ) * Def_grad_lista ( hh , 1 ) + Naprezanja ( hh , 5 ) - Naprezanja ( hh , 4 ) * Def_grad_lista ( hh , 3 );
-        Eshelby2 ( hh , 3 ) = - Naprezanja ( hh , 3 ) * Def_grad_lista ( hh , 2 ) - Naprezanja ( hh , 5 ) * Def_grad_lista ( hh , 4 ) + Naprezanja ( hh , 5 );
-        Eshelby2 ( hh , 4 ) = W ( hh ) - Naprezanja ( hh , 5 ) * Def_grad_lista ( hh , 2 ) - Naprezanja ( hh , 4 ) * Def_grad_lista ( hh , 4 ) + Naprezanja ( hh , 4 );
+        for ii = 1 : rlength * nEL
+            
+            Eshelby2 ( ii , 1 ) = W ( ii ) - Naprezanja ( ii , 3 ) * Def_grad_lista ( ii , 1 )  + Naprezanja ( ii , 3 ) - Naprezanja ( ii , 5 ) * Def_grad_lista ( ii , 3 );
+            Eshelby2 ( ii , 2 ) = - Naprezanja ( ii , 5 ) * Def_grad_lista ( ii , 1 ) + Naprezanja ( ii , 5 ) - Naprezanja ( ii , 4 ) * Def_grad_lista ( ii , 3 );
+            Eshelby2 ( ii , 3 ) = - Naprezanja ( ii , 3 ) * Def_grad_lista ( ii , 2 ) - Naprezanja ( ii , 5 ) * Def_grad_lista ( ii , 4 ) + Naprezanja ( ii , 5 );
+            Eshelby2 ( ii , 4 ) = W ( ii ) - Naprezanja ( ii , 5 ) * Def_grad_lista ( ii , 2 ) - Naprezanja ( ii , 4 ) * Def_grad_lista ( ii , 4 ) + Naprezanja ( ii , 4 );
+            
+        end;
+        
+%         Eshelby_tenzor3 ( : , : , ii ) = W ( ii ) .* eye ( 2 ) -  Naprezanja_tenzor ( : , : , ii ) * ( Deformacijski_gradijent ( : , : , ii ) - eye ( 2 ) );
 
         %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
         % Configuration force Gaussian integration
@@ -416,13 +360,13 @@ pomak_popis ( : , broj_koraka ) = pomak;
 Conf_popis ( : , broj_koraka ) = Conf_force;
 Energy_FEM_popis ( broj_koraka ) = Energy_FEM;
 
-if broj_koraka ~= 1
-    norma_popis ( broj_koraka ) = norma;
-end;
+% if broj_koraka ~= 1
+%     norma_popis ( broj_koraka ) = norma;
+% end;
 
-if rem ( broj_koraka , 20 ) == 0
+if rem ( broj_koraka , 1 ) == 0
     
-    disp ( [ 'Broj koraka: ', num2str(broj_koraka) , ' Norma konfiguracijskih sila: ', num2str(norma), ' Energija: ', num2str(Energy_FEM) ] )
+    disp ( [ 'Broj koraka: ', num2str(broj_koraka) , ' Konfiguracijska sila: ', num2str(Conf_force(2*Tangential_node_x)), ' Energija: ', num2str(Energy_FEM) ] )
     
 end;
 
@@ -437,6 +381,8 @@ norma_popis = norma_popis ( : , 1 : broj_koraka - Oduzmi );
 
 % Normalized total potential energy
 Energy_FEM_normalized = Energy_FEM_popis .* G ./ ( p0^2 * lgrede * hgrede );
+xy_coordinate_normalized = reshape( xy_popis ( 2 , Tangential_node_x , : ) ./ lgrede , 1 , length(xy_popis) ) ;
+Conf_force_normalised = Conf_popis ( 2 * Tangential_node_x , : ) .* G / ( abs(p0) * lgrede );
 
 
 ELX(2:5,:) = ELX1;
