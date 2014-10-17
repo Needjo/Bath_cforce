@@ -27,7 +27,7 @@ G = E/(2*(1+Nu));
 Lame_1 = E * Nu / ( ( 1 + Nu ) * ( 1 - 2 * Nu ) );
 
 % p0 defines a distributed load
-p0 = 100000;
+p0 = 10000;
 % Sila defines a concentrated load
 % Sila = -100;
 
@@ -35,14 +35,14 @@ p0 = 100000;
 % the loaded edge
 tang_remesh = 1;
 
-c = 0.01;
-max_koraka = 1;
+c = 0.00001;
+max_koraka = 125;
 tol = 0.01;
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % Finite element mesh import
 
-textfilename = ['Q4_mesh_SEN_' num2str(nlelemenata) 'x' num2str(nhelemenata) '.txt'];
+textfilename = ['Q4_mesh_SEN_' num2str(lgrede) '_' num2str(hgrede) '_' num2str(notch) '_EL_' num2str(nlelemenata) 'x' num2str(nhelemenata) '.txt'];
 [ xy , EL , nC , nEL ] = Q4_mesh_reader ( textfilename );
 
 for i = 1:nEL
@@ -70,58 +70,65 @@ ELYPLOT = [ELY(2:5,:);ELY(2,:)];
 Crack_tip = find ( round(xy(1,:)*100)/100 == lgrede/2 & round(xy(2,:)*100)/100 == notch );
 
 
-% % % % % %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-% % % % % % Defining non-boundary nodes which are considered in configurational
-% % % % % % force based mesh improvement
-% % % % % 
-% % % % % Internal_node = [];
-% % % % % External_node = [];
-% % % % % Tangential_node_x = [];
-% % % % % Tangential_node_y = [];
-% % % % % Fixed_node = [];
-% % % % % 
-% % % % % for ii = 1 : nC
-% % % % %     
-% % % % %     if xy ( 1 , ii ) ~= 0 && xy ( 1 , ii ) ~= lgrede && xy ( 2 , ii ) ~= 0 && xy ( 2 , ii ) ~= hgrede
-% % % % %         
-% % % % %         Internal_node = [ Internal_node ii ];
-% % % % %         
-% % % % %     end;
-% % % % %     
-% % % % % end;
-% % % % % 
-% % % % % if tang_remesh == 1
-% % % % %     
-% % % % %     for ii = 1 : nC
-% % % % %         
-% % % % %         if xy ( 1 , ii ) == 0  
-% % % % %             
-% % % % %             Tangential_node_x = [ Tangential_node_x ii ];
-% % % % %             
-% % % % %         end;
-% % % % %         
-% % % % %         if ( xy ( 2 , ii ) == 0 || xy ( 2 , ii ) == hgrede ) && xy ( 1 , ii ) ~= lgrede
-% % % % %             
-% % % % %             Tangential_node_y = [ Tangential_node_y ii ];
-% % % % %             
-% % % % %         end;
-% % % % %         
-% % % % %     end;
-% % % % %     
-% % % % % end;
-% % % % %     
-% % % % % for ii = 1 : nC
-% % % % %     
-% % % % %     if ~(any(ii==Internal_node) || any(ii==Tangential_node_x) || any(ii==Tangential_node_y))
-% % % % %         
-% % % % %         Fixed_node = [ Fixed_node ii ];
-% % % % %         
-% % % % %     end;
-% % % % %     
-% % % % % end;
-% % % % %     
-% % % % % 
-% % % % % 
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% Defining non-boundary nodes which are considered in configurational
+% force based mesh improvement
+
+Internal_node = [];
+External_node = [];
+Tangential_node_x = [];
+Tangential_node_y = [];
+Fixed_node = [];
+
+for ii = 1 : nC
+    
+    if xy ( 1 , ii ) ~= 0 && round( xy ( 1 , ii ) *100 )/100 ~= lgrede && xy ( 2 , ii ) ~= 0 && xy ( 2 , ii ) ~= hgrede && ~( round ( xy ( 1 , ii ) * 100 )/100 == lgrede/2 && round ( xy ( 2 , ii ) * 100 )/100 <= notch )
+        
+        Internal_node = [ Internal_node ii ];
+        
+    end;
+    
+end;
+
+if tang_remesh == 1
+    
+    for ii = 1 : nC
+        
+%         if xy ( 1 , ii ) == 0 || round ( xy ( 1 , ii ) * 100 )/100 == lgrede || ( round ( xy ( 2 , ii ) * 100 )/100 <= notch  && round( xy ( 1 , ii ) * 100 )/100 == lgrede/2 )  
+%             
+%             Tangential_node_x = [ Tangential_node_x ii ];
+%             
+%         end;
+
+        if round ( xy ( 2 , ii ) * 100 )/100 <= notch  && round( xy ( 1 , ii ) * 100 )/100 == lgrede/2
+    
+            Tangential_node_x = [ Tangential_node_x ii ];
+    
+        end;
+        
+        if ( xy ( 2 , ii ) == 0 || round ( xy ( 2 , ii ) * 100 )/100 == hgrede )
+            
+            Tangential_node_y = [ Tangential_node_y ii ];
+            
+        end;
+        
+    end;
+    
+end;
+    
+for ii = 1 : nC
+    
+    if ~(any(ii==Internal_node) || any(ii==Tangential_node_x) || any(ii==Tangential_node_y))
+        
+        Fixed_node = [ Fixed_node ii ];
+        
+    end;
+    
+end;
+
+Fixed_node = [ Fixed_node Crack_tip 1 nlelemenata+2 nC-nlelemenata nC ]; 
+    
+
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % Plane strain state for isotropic linear elastic material
@@ -163,7 +170,7 @@ FV = zeros ( 2 * nC , 1 );
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % Use this for a horizontal distributed load on both sides
-Sila = p0 / (nhelemenata);
+Sila = p0 * hgrede / (nhelemenata);
 
 FV ( 2*find(xy(1,:)==round(lgrede*100)/100) - 1 ) = Sila;
 FV ( 2*find(xy(1,:)==0) - 1 ) = -Sila;
@@ -194,6 +201,7 @@ pomak_popis = zeros ( nC * 2 , max_koraka );
 Conf_popis = zeros ( nC * 2 , max_koraka );
 Energy_FEM_popis = zeros ( 1 , max_koraka );
 norma_popis = zeros ( 1 , max_koraka );
+J_integral_num = zeros ( 1 , max_koraka );
 Oduzmi = 0;
 
 Usporedba_korak = [  ];
@@ -211,7 +219,7 @@ for broj_koraka = 1 : max_koraka
     
     if broj_koraka ~= 1
         
-        error
+        
         
         Cforce_operational = Conf_force;
         
@@ -378,33 +386,6 @@ end;
 
 Energy_FEM = 0.5 * pomak' * Kg * pomak - pomak' * FV;
 
-% Calculation of the Eshelby stress in each integration point
-
-% Approach from Mueller2002 - linear elastic - take one
-% % % Eshelby = zeros ( rlength * nEL , 1 );
-% % % 
-% % % for ii = 1 : rlength * nEL
-% % %     
-% % %     Eshelby ( ii , 1 ) = W ( ii ) - Naprezanja ( ii , 3 ) * ( Def_grad_lista ( ii , 1 ) - 1 ) - Naprezanja ( ii , 5 ) * Def_grad_lista ( ii , 3 );
-% % %     Eshelby ( ii , 2 ) = - Naprezanja ( ii , 3 ) * Def_grad_lista ( ii , 2 ) - Naprezanja ( ii , 5 ) * ( Def_grad_lista ( ii , 4 ) - 1 );
-% % %     Eshelby ( ii , 3 ) = - Naprezanja ( ii , 5 ) * ( Def_grad_lista ( ii , 1 ) - 1 ) - Naprezanja ( ii , 4 ) * Def_grad_lista ( ii , 3 );
-% % %     Eshelby ( ii , 4 ) = W ( ii ) - Naprezanja ( ii , 5 ) * Def_grad_lista ( ii , 2 ) - Naprezanja ( ii , 4 ) * ( Def_grad_lista ( ii , 4 ) - 1 );
-% % % 
-% % % end;
-
-% Approach from Mueller2002 - linear elastic - take two
-
-% % % Eshelby2 = zeros ( rlength * nEL , 1 );
-% % % 
-% % % for ii = 1 : rlength * nEL
-% % %     
-% % %     Eshelby2 ( ii , 1 ) = W ( ii ) - Naprezanja ( ii , 3 ) * Def_grad_lista ( ii , 1 )  + Naprezanja ( ii , 3 ) - Naprezanja ( ii , 5 ) * Def_grad_lista ( ii , 3 );
-% % %     Eshelby2 ( ii , 2 ) = - Naprezanja ( ii , 5 ) * Def_grad_lista ( ii , 1 ) + Naprezanja ( ii , 5 ) - Naprezanja ( ii , 4 ) * Def_grad_lista ( ii , 3 );
-% % %     Eshelby2 ( ii , 3 ) = - Naprezanja ( ii , 3 ) * Def_grad_lista ( ii , 2 ) - Naprezanja ( ii , 5 ) * Def_grad_lista ( ii , 4 ) + Naprezanja ( ii , 5 );
-% % %     Eshelby2 ( ii , 4 ) = W ( ii ) - Naprezanja ( ii , 5 ) * Def_grad_lista ( ii , 2 ) - Naprezanja ( ii , 4 ) * Def_grad_lista ( ii , 4 ) + Naprezanja ( ii , 4 );
-% % % 
-% % % end;
-
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % Assembly of configurational forces 
 
@@ -430,12 +411,15 @@ xy_popis ( : , : , broj_koraka ) = xy;
 pomak_popis ( : , broj_koraka ) = pomak;
 Conf_popis ( : , broj_koraka ) = Conf_force;
 Energy_FEM_popis ( broj_koraka ) = Energy_FEM;
+J_integral_num ( broj_koraka ) = -Conf_force ( Crack_tip * 2 );
 
 if broj_koraka ~= 1
     norma_popis ( broj_koraka ) = norma;
+else
+    norma = NaN;
 end;
 
-if rem ( broj_koraka , 20 ) == 0
+if rem ( broj_koraka , 1 ) == 0
     
     disp ( [ 'Broj koraka: ', num2str(broj_koraka) , ' Norma konfiguracijskih sila: ', num2str(norma), ' Energija: ', num2str(Energy_FEM) ] )
     
@@ -543,9 +527,14 @@ ELY(2:5,:) = ELY1;
 % Analytical results
 
 Stress_intensity_factor_an = ( 1.12 - 0.23 * (notch/hgrede) + 10.56 * (notch/hgrede)^2 - 21.74 * (notch/hgrede)^3 + 30.42 * (notch/hgrede)^4 ) * p0 * sqrt( pi * notch );
+Stress_intensity_factor_an2 = ( 1.12 - 0.231 * (notch/hgrede) + 10.55 * (notch/hgrede)^2 - 21.72 * (notch/hgrede)^3 + 30.39 * (notch/hgrede)^4 ) * p0 * sqrt( pi * notch );
 J_integral_an = Stress_intensity_factor_an^2 / E * ( 1 - Nu^2 );
+J_integral_an2 = Stress_intensity_factor_an2^2 / E * ( 1 - Nu^2 );
 
-J_integral_num = -Conf_force ( Crack_tip * 2 );
+
+Normalised_J_an = J_integral_an * Lame_1 / ( p0^2 * notch );
+Normalised_J_an2 = J_integral_an2 * Lame_1 / ( p0^2 * notch );
+Normalised_J_num = J_integral_num * Lame_1 / ( p0^2 * notch );
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -608,7 +597,7 @@ plot(ELXPLOT3,ELYPLOT3,'k-')
 % plot(ELXPLOT1,ELYPLOT1,'r--')
 hold off
 
-Q4_Conf_force_to_VTK(nC,nEL,xy_popis(:,:,reshape(Usporedba_korak,1,length(Usporedba_korak))),EL,pomak_popis(:,reshape(Usporedba_korak,1,length(Usporedba_korak))),length(Usporedba_korak),Stress_point)
+% Q4_Conf_force_to_VTK(nC,nEL,xy_popis(:,:,reshape(Usporedba_korak,1,length(Usporedba_korak))),EL,pomak_popis(:,reshape(Usporedba_korak,1,length(Usporedba_korak))),length(Usporedba_korak),Stress_point)
 
 
 
