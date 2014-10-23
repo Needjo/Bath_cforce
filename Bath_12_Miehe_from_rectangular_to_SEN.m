@@ -27,7 +27,7 @@ G = E/(2*(1+Nu));
 Lame_1 = E * Nu / ( ( 1 + Nu ) * ( 1 - 2 * Nu ) );
 
 % p0 defines a distributed load
-p0 = 10000000;
+p0 = 1000*10000000;
 % Sila defines a concentrated load
 % Sila = -100;
 
@@ -175,7 +175,7 @@ FV ( 2*find(xy(1,:)==round(lgrede*100)/100) - 1 ) = Sila;
 FV ( 2*find(xy(1,:)==0) - 1 ) = -Sila;
 
 FV(2*nC - 1) = Sila/2;
-FV(2*(nlelemenata+2)-1)=Sila/2;
+FV(2*(nlelemenata+1)-1)=Sila/2;
 FV(1) = -Sila/2;
 FV(2*(nC-nlelemenata)-1) = -Sila/2;
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% 
@@ -195,9 +195,9 @@ detJacob_save = zeros ( nEL * rlength , 1 );
 Bmatrica_save = zeros ( nEL * rlength , 24 );
 Bmatrica2_save = zeros ( nEL * rlength , 32 );
 Pomaci_elementa = zeros ( 8 , 1 );
-xy_popis = zeros ( 2 , nC , max_koraka );
-pomak_popis = zeros ( nC * 2 , max_koraka );
-Conf_popis = zeros ( nC * 2 , max_koraka );
+xy_popis = cell ( max_koraka , 1 );
+pomak_popis = cell ( max_koraka , 1 );
+Conf_popis = cell ( max_koraka , 1 );
 Energy_FEM_popis = zeros ( 1 , max_koraka );
 norma_popis = zeros ( 1 , max_koraka );
 J_integral_num = zeros ( 1 , max_koraka );
@@ -230,24 +230,158 @@ for broj_koraka = 1 : max_koraka
             Crack_propagation_direction = 1;
             
         end;
-        break
+        
         J_integral = -J_integral;
+                
+        if broj_koraka == 2, Seg_tip = 23; elseif broj_koraka == 3, Seg_tip = 28; end;
         
-        Node_SEG ( Crack_tip , : ) = 0;
-        
-        if broj_koraka == 2, Seg_tip = 23; end;
-        
-        
+%         A SEGMENT SELECTION TECHNIQUE IS NEEDED!
         
         
+        %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+        % Starting the crack propagation by invoking segment and node
+        % doubling and appropriate data structure updates. Crack_tip node
+        % is the node to be doubled while Seg_tip is the segment along
+        % which the crack propagation occurs
+        %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+        % Defining the elements connected by the crack tip
+        Element_tip_1 = SEG_NEIGHBOUR(1,Seg_tip);
+        Element_tip_2 = SEG_NEIGHBOUR(2,Seg_tip);
+        
+        % Defining the new segment, positioning it at the last place in the 
+        % segment list), increasing the global number of segments
+        Seg_new = nSEG + 1;
+        SEG = [ SEG , SEG(:,Seg_tip) ];
+        nSEG = nSEG + 1;
+        
+        % Changing the neighbouring elements of the new and critical segment
+        SEG_NEIGHBOUR ( : , Seg_new ) = [ SEG_NEIGHBOUR(2,Seg_tip) 0 ];
+        SEG_NEIGHBOUR ( 2 , Seg_tip ) = 0;
+
+        % Changing the element segment connectivity - the right element is now
+        % connected to the new segment. The left element remains as it was.
+        % Changing the neighbouring elements for the two elements at the crack tip
+        for ii = 1 : 4
+    
+            if EL_SEG ( ii , Element_tip_2 ) == Seg_tip
+        
+                EL_SEG ( ii , Element_tip_2 ) = Seg_new;
+        
+            end;
+            
+            if EL_NEIGHBOUR ( ii , Element_tip_1 ) == Element_tip_2
+        
+                EL_NEIGHBOUR ( ii , Element_tip_1 ) = 0;
+        
+            end;
+    
+            if EL_NEIGHBOUR ( ii , Element_tip_2 ) == Element_tip_1
+        
+                EL_NEIGHBOUR ( ii , Element_tip_2 ) = 0;
+        
+            end;
+    
+        end;
+        
+        % Node doubling, the new node is added next to the old node to
+        % retain a better global stiffness matrix structure. Increasing the
+        % total number of nodes.
+        xy = [ xy(:,1:Crack_tip) , xy(:,Crack_tip:nC) ];
+        nC = nC + 1;
+        New_node = Crack_tip+1;
         
         
+        % Renumbering of the nodes due to the addition of a new node in the
+        % mesh. Updating the boundary conditions and force vector
+        Cracker = EL>Crack_tip;
+        Cracker ( 1 , : ) = false;
+        EL(Cracker)= EL(Cracker) + 1;
+        SEG(SEG>Crack_tip)= SEG(SEG>Crack_tip) + 1;
+        for ii = 1:length(Rubni)
+            if Rubni(1,ii) > Crack_tip
+                Rubni(1,ii) = Rubni(1,ii) + 1;
+            end;
+        end;
+        FV = [ FV(1:2*Crack_tip,1); [0;0]; FV(2*Crack_tip+1:end) ]; 
+
+        % Finding the element which retains the old node Crack_tip        
+        Keeper = find ( sum( repmat(Seg_tip,4,nEL) ==  EL_SEG ) > 0 & sum ( repmat(Crack_tip,4,nEL) ==  EL(2:5,:) ) );
+
+        % Logical operators for changing the element topology of the 
+        % elements which contain the new node New_node
+        logical_aid = repmat(Crack_tip,4,nEL) ==  EL(2:5,:) & [ true(4,Keeper-1) false(4,1) true(4,nEL-Keeper) ];
+        logical_aid = [ false(1,nEL) ; logical_aid ];
+
+        EL(logical_aid) = New_node;
         
+        % Finding the segments which get the new node New_node        
+        NonKeeper = find ( sum( repmat(Seg_new,4,nEL) ==  EL_SEG ) > 0 & sum ( repmat(New_node,4,nEL) ==  EL(2:5,:) ) );
+
+        % Logical operators for changing the segment topology of the 
+        % segments which contain the new node New_node
+        logical_aid = SEG_NEIGHBOUR == NonKeeper;
+        logical_aid = (SEG==Crack_tip) & (repmat(logical_aid(1,:) | logical_aid(2,:) ,2,1));
+
+        SEG(logical_aid) = New_node;
+
+        % Defining the node occurence in elements and segments - regular quadrilateral
+        % elements
+
+        Node_occurence_EL = zeros ( nC , 1 );
+        Node_occurence_SEG = zeros ( nC , 1 );
+
+        for ii = 1 : nC
+            
+            Node_occurence_EL ( ii , 1 ) = sum ( sum ( ii == EL ( 2:5 , : ) ) );
+            Node_occurence_SEG ( ii , 1 ) = sum ( sum ( ii == SEG  ) );
+
+        end;
         
+        % Defining the elements and segments which contain the node
+        Node_EL = zeros ( nC , max ( Node_occurence_EL ) );
+        Node_SEG = zeros ( nC , max ( Node_occurence_SEG ) );
+
+        for ii = 1 : nC
+            
+            temp = find ( sum ( ii == EL(2:5,:) ) > 0  );
+            
+            for jj = 1 : length ( temp )
+                
+                Node_EL ( ii , jj ) = temp ( jj );
+                
+            end;
+            
+            temp = find ( sum ( ii == SEG ) > 0  );
+            
+            for jj = 1 : length ( temp )
+                
+                Node_SEG ( ii , jj ) = temp ( jj );
+                
+            end;
+            
+        end;
+
     end;
     
-    
-    
+% The new nodes need to be fed into the stiffness matrix    
+for i = 1:nEL
+    ELX ( 1 , i ) = EL ( 1 , i );
+    ELX ( 2 , i ) = xy ( 1, EL ( 2 , i ) );
+    ELX ( 3 , i ) = xy ( 1, EL ( 3 , i ) );
+    ELX ( 5 , i ) = xy ( 1, EL ( 5 , i ) );
+    ELX ( 4 , i ) = xy ( 1, EL ( 4 , i ) );
+end;
+for i = 1:nEL
+    ELY ( 1 , i ) = EL ( 1 , i );
+    ELY ( 2 , i ) = xy ( 2, EL ( 2 , i ) );
+    ELY ( 3 , i ) = xy ( 2, EL ( 3 , i ) );
+    ELY ( 5 , i ) = xy ( 2, EL ( 5 , i ) );
+    ELY ( 4 , i ) = xy ( 2, EL ( 4 , i ) );
+end;
+
+
+ELX1 = ELX(2:5,:);
+ELY1 = ELY(2:5,:);    
     
     
     
@@ -401,9 +535,9 @@ end;
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % Post-processing variables
 
-xy_popis ( : , : , broj_koraka ) = xy;
-pomak_popis ( : , broj_koraka ) = pomak;
-Conf_popis ( : , broj_koraka ) = Conf_force;
+xy_popis { broj_koraka } = xy;
+pomak_popis { broj_koraka } = pomak;
+Conf_popis { broj_koraka } = Conf_force;
 Energy_FEM_popis ( broj_koraka ) = Energy_FEM;
 % J_integral_num ( broj_koraka ) = -Conf_force ( Crack_tip * 2 );
 
@@ -430,11 +564,11 @@ end;
 
 end;
 
-xy_popis = xy_popis ( : , : , 1 : broj_koraka - Oduzmi );
-pomak_popis = pomak_popis ( : , 1 : broj_koraka - Oduzmi );
-Conf_popis = Conf_popis ( : , 1 : broj_koraka - Oduzmi );
-Energy_FEM_popis = Energy_FEM_popis ( : , 1 : broj_koraka - Oduzmi );
-norma_popis = norma_popis ( : , 1 : broj_koraka - Oduzmi );
+% xy_popis = xy_popis ( : , : , 1 : broj_koraka - Oduzmi );
+% pomak_popis = pomak_popis ( : , 1 : broj_koraka - Oduzmi );
+% Conf_popis = Conf_popis ( : , 1 : broj_koraka - Oduzmi );
+% Energy_FEM_popis = Energy_FEM_popis ( : , 1 : broj_koraka - Oduzmi );
+% norma_popis = norma_popis ( : , 1 : broj_koraka - Oduzmi );
 
 Naprezanja_korak = cat(2,Naprezanja_korak , zeros(nEL*rlength,4,length(Usporedba_korak)));
 
