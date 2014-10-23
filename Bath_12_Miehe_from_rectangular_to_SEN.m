@@ -36,7 +36,7 @@ p0 = 1000*10000000;
 tang_remesh = 1;
 
 c = 0.00001;
-max_koraka = 2;
+max_koraka =4;
 tol = 0.01;
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -233,7 +233,13 @@ for broj_koraka = 1 : max_koraka
         
         J_integral = -J_integral;
                 
-        if broj_koraka == 2, Seg_tip = 23; elseif broj_koraka == 3, Seg_tip = 28; end;
+        if broj_koraka == 2
+            Seg_tip = 23; 
+        elseif broj_koraka == 3
+            Seg_tip = 28;
+        elseif broj_koraka == 4
+            Seg_tip = 33;
+        end;
         
 %         A SEGMENT SELECTION TECHNIQUE IS NEEDED!
         
@@ -304,18 +310,33 @@ for broj_koraka = 1 : max_koraka
         end;
         FV = [ FV(1:2*Crack_tip,1); [0;0]; FV(2*Crack_tip+1:end) ]; 
 
-        % Finding the element which retains the old node Crack_tip        
+        % Finding the element which retains the old node Crack_tip
         Keeper = find ( sum( repmat(Seg_tip,4,nEL) ==  EL_SEG ) > 0 & sum ( repmat(Crack_tip,4,nEL) ==  EL(2:5,:) ) );
+
+        Keeper = [ Keeper EL(1,sum(EL_NEIGHBOUR == Keeper) & sum(EL(2:5,:) == Crack_tip))];
+                
 
         % Logical operators for changing the element topology of the 
         % elements which contain the new node New_node
-        logical_aid = repmat(Crack_tip,4,nEL) ==  EL(2:5,:) & [ true(4,Keeper-1) false(4,1) true(4,nEL-Keeper) ];
+        logical_aid = true ( 4 , nEL );
+        logical_aid ( : , Keeper ) = false;
+        logical_aid = repmat(Crack_tip,4,nEL) ==  EL(2:5,:) & logical_aid;
         logical_aid = [ false(1,nEL) ; logical_aid ];
-
+        
         EL(logical_aid) = New_node;
+
+%         Changer = Node_EL ( Crack_tip , Node_EL ( Crack_tip , : ) ~= Keeper & Node_EL ( Crack_tip , : ) ~= 0 );
+
+%         EL ( 2:5 , find ( EL( 2:5 , : ) == Changer ) = New_node;
         
         % Finding the segments which get the new node New_node        
         NonKeeper = find ( sum( repmat(Seg_new,4,nEL) ==  EL_SEG ) > 0 & sum ( repmat(New_node,4,nEL) ==  EL(2:5,:) ) );
+%         Node_SEG(Crack_tip,:)~= NonKeeper 
+%         NonKeeper = [ NonKeeper EL_SEG(:,SEG_NEIGHBOUR(:,NonKeeper)~=)     EL(1,sum(EL_SEG == NonKeeper) & sum(EL(2:5,:) == Crack_tip))];
+
+        
+        
+% SEGMENT UPDATING IS NOT GOOD ENOUGH!
 
         % Logical operators for changing the segment topology of the 
         % segments which contain the new node New_node
@@ -323,6 +344,37 @@ for broj_koraka = 1 : max_koraka
         logical_aid = (SEG==Crack_tip) & (repmat(logical_aid(1,:) | logical_aid(2,:) ,2,1));
 
         SEG(logical_aid) = New_node;
+        
+        
+        for ii = 1 : 2
+            
+            if SEG_NEIGHBOUR ( ii , NonKeeper ) ~= Element_tip_1 & SEG_NEIGHBOUR ( ii , NonKeeper ) ~= Element_tip_2
+                
+                NonKeeper_element = SEG_NEIGHBOUR ( ii , NonKeeper );
+                
+            end;
+            
+        end;
+        
+        for ii = 1 : 4
+            
+            if NonKeeper_element == 0
+                
+                break
+                
+            end;
+            
+            for jj = 1 : 2
+            
+                if SEG(jj,EL_SEG ( ii , NonKeeper_element ) ) == Crack_tip & EL_SEG ( ii , NonKeeper_element ) ~= NonKeeper
+                    
+                    SEG ( jj,EL_SEG ( ii , NonKeeper_element ) ) = New_node;
+                    
+                end;
+            
+            end;
+            
+        end;
 
         % Defining the node occurence in elements and segments - regular quadrilateral
         % elements
