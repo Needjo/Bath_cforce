@@ -36,7 +36,7 @@ p0 = 1000*10000000;
 tang_remesh = 1;
 
 c = 0.00001;
-max_koraka =4;
+max_koraka = 4;
 tol = 0.01;
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -233,14 +233,32 @@ for broj_koraka = 1 : max_koraka
         
         J_integral = -J_integral;
                 
-        if broj_koraka == 2
-            Seg_tip = 23; 
-        elseif broj_koraka == 3
-            Seg_tip = 28;
-        elseif broj_koraka == 4
-            Seg_tip = 33;
+%         if broj_koraka == 2
+%             Seg_tip = 23; 
+%         elseif broj_koraka == 3
+%             Seg_tip = 28;
+%         elseif broj_koraka == 4
+%             Seg_tip = 33;
+%         else
+%             Seg_tip = 38;
+%         end;
+
+        Crack_tip_angle = atan ( Conf_force(2*Crack_tip,1) / Conf_force(2*Crack_tip-1,1) );
+        
+        Crack_angle_nodes = sum ( SEG ( : , Node_SEG ( Crack_tip , Node_SEG ( Crack_tip , : ) > 0 ) ) ) - Crack_tip;
+        
+        for ii = 1 : length ( Crack_angle_nodes ) 
+            
+            temp_angle = xy ( : , Crack_angle_nodes(ii) ) - xy ( : , Crack_tip );
+            Crack_angle ( ii ) = atan ( temp_angle ( 2 ) / temp_angle ( 1 ) );
+            
         end;
         
+        [ A , Crack_angle_critical ] = min ( abs ( Crack_angle - Crack_tip_angle - pi ) );
+        
+        Seg_tip = find(sum(SEG == repmat([ Crack_tip; Crack_angle_nodes(Crack_angle_critical) ],1,nSEG))==2 | sum(SEG == repmat([ Crack_angle_nodes(Crack_angle_critical);Crack_tip ],1,nSEG))==2);
+        
+ 
 %         A SEGMENT SELECTION TECHNIQUE IS NEEDED!
         
         
@@ -334,9 +352,7 @@ for broj_koraka = 1 : max_koraka
 %         Node_SEG(Crack_tip,:)~= NonKeeper 
 %         NonKeeper = [ NonKeeper EL_SEG(:,SEG_NEIGHBOUR(:,NonKeeper)~=)     EL(1,sum(EL_SEG == NonKeeper) & sum(EL(2:5,:) == Crack_tip))];
 
-        
-        
-% SEGMENT UPDATING IS NOT GOOD ENOUGH!
+
 
         % Logical operators for changing the segment topology of the 
         % segments which contain the new node New_node
@@ -746,7 +762,7 @@ ELY1PLOT = ELYPLOT2 ( 2:5 , : );
 
 figure
 hold on
-plot(ELXPLOT,ELYPLOT,'k-')
+% plot(ELXPLOT,ELYPLOT,'k-')
 
 % [ELX , ELY , EL ] = formiranje_4kutnihelemenata( xy, nlelemenata, nhelemenata );
 
