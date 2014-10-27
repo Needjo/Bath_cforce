@@ -16,8 +16,8 @@ lgrede = 2;
 hgrede = 0.5;
 tgrede = 1;
 
-nlelemenata = 12;
-nhelemenata = 6;
+nlelemenata = 80;
+nhelemenata = 20;
 
 E = 2 * 80000000000 * ( 1 + 0.3 );
 Nu = 0.3;
@@ -27,7 +27,7 @@ G = E/(2*(1+Nu));
 Lame_1 = E * Nu / ( ( 1 + Nu ) * ( 1 - 2 * Nu ) );
 
 % p0 defines a distributed load
-p0 = 100000000;
+p0 = 10^10;
 % Sila defines a concentrated load
 % Sila = -100;
 
@@ -36,7 +36,7 @@ p0 = 100000000;
 tang_remesh = 1;
 
 c = 0.00001;
-max_koraka = 12;
+max_koraka = 16;
 tol = 0.01;
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -147,8 +147,8 @@ rlength = length ( rgauss );
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % Boundary values and loading definition
 
-Rubni = [1 : nlelemenata+1 : nC];
-Rubni = [ Rubni ; zeros(2,length(Rubni)) ];
+Rubni = [ 1 , nlelemenata+1 , find(xy(1,:)==lgrede/2 & xy(2,:)==hgrede) ];
+Rubni = [ Rubni ; 1 1 0 ; 0 0 1 ];
 
 
 FV = zeros ( 2 * nC , 1 );
@@ -160,9 +160,9 @@ FV = zeros ( 2 * nC , 1 );
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % Use this for a DCB
-Sila = p0;
-FV ( 2 * nC ) = Sila;
-FV ( 2 * ( nlelemenata + 1 ) ) = -Sila;
+% Sila = p0;
+% FV ( 2 * nC ) = Sila;
+% FV ( 2 * ( nlelemenata + 1 ) ) = -Sila;
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 
@@ -176,15 +176,15 @@ FV ( 2 * ( nlelemenata + 1 ) ) = -Sila;
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % Use this for a horizontal distributed load on both sides
-% Sila = p0 * hgrede / (nhelemenata);
-% 
-% FV ( 2*find(xy(1,:)==round(lgrede*100)/100) - 1 ) = Sila;
-% FV ( 2*find(xy(1,:)==0) - 1 ) = -Sila;
-% 
-% FV(2*nC - 1) = Sila/2;
-% FV(2*(nlelemenata+1)-1)=Sila/2;
-% FV(1) = -Sila/2;
-% FV(2*(nC-nlelemenata)-1) = -Sila/2;
+Sila = p0 * hgrede / (nhelemenata);
+
+FV ( 2*find(xy(1,:)==round(lgrede*100)/100) - 1 ) = Sila;
+FV ( 2*find(xy(1,:)==0) - 1 ) = -Sila;
+
+FV(2*nC - 1) = Sila/2;
+FV(2*(nlelemenata+1)-1)=Sila/2;
+FV(1) = -Sila/2;
+FV(2*(nC-nlelemenata)-1) = -Sila/2;
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% 
   
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -225,7 +225,7 @@ for broj_koraka = 1 : max_koraka
         [ J_integral , Crack_tip ] = max ( abs ( Conf_force ) );
         
         if broj_koraka==2, 
-            Crack_tip = 2*find(round(xy ( 1 , : )*100)/100 == lgrede & round(xy ( 2 , : )*100)/100 == hgrede/2);
+            Crack_tip = 2*find(round(xy ( 1 , : )*100)/100 == lgrede/2 & xy ( 2 , : ) == 0);
         end;
         
         if rem ( Crack_tip , 2 ) == 0
@@ -277,7 +277,7 @@ for broj_koraka = 1 : max_koraka
         Seg_tip = find(sum(SEG == repmat([ Crack_tip; Crack_angle_nodes(Crack_angle_critical) ],1,nSEG))==2 | sum(SEG == repmat([ Crack_angle_nodes(Crack_angle_critical);Crack_tip ],1,nSEG))==2);
         
         if broj_koraka==2, 
-            Seg_tip = find(sum(repmat([Crack_tip-1;Crack_tip],1,nSEG)==SEG)==2);
+            Seg_tip = find(sum(repmat([Crack_tip;Crack_tip+nlelemenata+1],1,nSEG)==SEG)==2);
         end;
  
 %         A SEGMENT SELECTION TECHNIQUE IS NEEDED!
