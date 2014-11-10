@@ -7,6 +7,7 @@ function Q4_mesh_rectangular_writer_extended(lgrede,hgrede,nlelemenata,nhelemena
 % configurational force driven brittle crack propagation with R-adaptive 
 % mesh alignment" The file can then be read into MatLAB by using an 
 % appropriate reader. Procedure author: Nikola Lustig, mag.ing.aedif.
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 % nEL = numer of elements in the mesh
 % nC = number of nodes in the mesh
@@ -22,14 +23,21 @@ function Q4_mesh_rectangular_writer_extended(lgrede,hgrede,nlelemenata,nhelemena
 % Node_EL = elements having the node 
 % Node_SEG = segments having the node
 
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% File and location where the .txt mesh is saved
+textfilename = ['Mesh files\Q4_mesh_extended_' num2str(lgrede) '_' num2str(hgrede) '_EL_' num2str(nlelemenata) 'x' num2str(nhelemenata) '.txt'];
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% Basic input
 dl = lgrede / nlelemenata;
 dh = hgrede / nhelemenata;
 nC = ( nlelemenata + 1 ) * ( nhelemenata + 1 );
 nEL = nlelemenata * nhelemenata;
-nSEG = ( nlelemenata + 1 ) * nhelemenata + nlelemenata * ( nhelemenata + 1 ); 
+nSEG = ( nlelemenata + 1 ) * nhelemenata + nlelemenata * ( nhelemenata + 1 );
 
 
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % Regular rectangular node distribution
 
 n = 1;
@@ -45,7 +53,7 @@ for ii = 1:(nhelemenata+1)
     end;
 end;
 
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % Defining the node connectivity - regular quadrilateral elements
 
 h = 0;
@@ -77,7 +85,7 @@ for ii = 1:nEL
     ELY ( 4 , ii ) = xy ( 2, EL ( 4 , ii ) );
 end;
 
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % Defining the segment node connectivity - regular quadrilateral elements
 SEG = [ EL(2:3,:) , EL(5:-1:4,nEL-nlelemenata+1:nEL) ];
 
@@ -87,7 +95,7 @@ for ii = 1 : nhelemenata
     
 end;
 
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % Defining the element segment connectivity - regular quadrilateral elements
 EL_SEG = zeros ( 4 , nEL );
 
@@ -108,7 +116,7 @@ for ii = 1 : nEL
     
 end;
 
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % Defining the element neighbouring elements - regular quadrilateral
 % elements
 
@@ -131,7 +139,7 @@ for ii = 1 : nEL
     
 end;
   
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % Defining the segment neighbouring elements - regular quadrilateral
 % elements
 
@@ -154,7 +162,7 @@ for ii = 1 : nSEG
     
 end;
 
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % Defining the node occurence in elements and segments - regular quadrilateral
 % elements
 
@@ -174,28 +182,10 @@ for ii = 1 : nC
     
 end;
 
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-% Defining the segments which contain the node - regular quadrilateral
-% elements
-
-Node_SEG = zeros ( max ( Node_occurence_SEG ) );
-
-for ii = 1 : nC
-    
-    temp = find ( sum ( ii == SEG ) > 0  );
-    
-    for jj = 1 : length ( temp )
-        
-        Node_SEG ( ii , jj ) = temp ( jj );
-        
-    end;
-
-end;
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % Defining the elements which contain the node - regular quadrilateral
 % elements
-Node_EL = zeros ( max ( Node_occurence_EL ) );
+Node_EL = zeros ( nC , max ( Node_occurence_EL ) );
 
 for ii = 1 : nC
     
@@ -209,12 +199,30 @@ for ii = 1 : nC
 
 end;
 
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% Defining the segments which contain the node - regular quadrilateral
+% elements
+
+Node_SEG = zeros ( nC , max ( Node_occurence_SEG ) );
+
+for ii = 1 : nC
+    
+    temp = find ( sum ( ii == SEG ) > 0  );
+    
+    for jj = 1 : length ( temp )
+        
+        Node_SEG ( ii , jj ) = temp ( jj );
+        
+    end;
+
+end;
+
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % Printing the mesh out into a .txt file
 
-textfilename = ['Q4_mesh_extended_' num2str(lgrede) '_' num2str(hgrede) '_EL_' num2str(nlelemenata) 'x' num2str(nhelemenata) '.txt'];
+textfilename = ['Mesh files\Q4_mesh_extended_' num2str(lgrede) '_' num2str(hgrede) '_EL_' num2str(nlelemenata) 'x' num2str(nhelemenata) '.txt'];
 fid = fopen(textfilename, 'w');
 
 if fid == -1
@@ -229,7 +237,7 @@ fwrite(fid, ['% Q4 rectangular mesh for regular geometry' nl '% Total number of 
      '% Total number of elements: ' num2str(nEL) nl '% Total number of segments: ' num2str(nSEG) nl ]);
 
 % Loop over nodes for node coordinates
-fwrite(fid, ['% Node coordinates ' nl ]);
+fwrite(fid, ['% Node coordinates - xy' nl ]);
 for ii = 1 : nC
     
     fwrite (fid, [num2str(ii) ' ' num2str(xy(1,ii)) ' ' num2str(xy(2,ii)) ' 0.0' ' ;' nl ]);
@@ -237,7 +245,7 @@ for ii = 1 : nC
 end;
 
 % Loop over elements for nodal connectivity
-fwrite(fid, ['% Element node connectivity ' nl ]);
+fwrite(fid, ['% Element node connectivity - EL ' nl ]);
 for ii = 1 : nEL
     
     fwrite (fid, [num2str(ii) ' ' num2str(EL(2,ii)) ' ' num2str(EL(3,ii)) ' ' num2str(EL(4,ii)) ' ' num2str(EL(5,ii)) ' ;' nl ]);
@@ -245,7 +253,7 @@ for ii = 1 : nEL
 end;
 
 % Loop over segments for nodal connectivity
-fwrite(fid, ['% Segment node connectivity ' nl ]);
+fwrite(fid, ['% Segment node connectivity - SEG ' nl ]);
 for ii = 1 : nSEG
     
     fwrite (fid, [num2str(ii) ' ' num2str(SEG(1,ii)) ' ' num2str(SEG(2,ii)) ' ;' nl ]);
@@ -253,7 +261,7 @@ for ii = 1 : nSEG
 end;
 
 % Loop over elements for segment connectivity
-fwrite(fid, ['% Element segment connectivity ' nl ]);
+fwrite(fid, ['% Element segment connectivity - EL_SEG ' nl ]);
 for ii = 1 : nEL
     
     fwrite (fid, [num2str(ii) ' ' num2str(EL_SEG(1,ii)) ' ' num2str(EL_SEG(2,ii)) ' ' num2str(EL_SEG(3,ii)) ' ' num2str(EL_SEG(4,ii)) ' ;' nl ]);
@@ -261,7 +269,7 @@ for ii = 1 : nEL
 end;
 
 % Loop over elements for element neighbours 
-fwrite(fid, ['% Element neighbours ' nl ]);
+fwrite(fid, ['% Element neighbours - EL_NEIGHBOUR ' nl ]);
 for ii = 1 : nEL
     
     fwrite (fid, [num2str(ii) ' ' num2str(EL_NEIGHBOUR(1,ii)) ' ' num2str(EL_NEIGHBOUR(2,ii)) ' ' num2str(EL_NEIGHBOUR(3,ii)) ' ' num2str(EL_NEIGHBOUR(4,ii)) ' ;' nl ]);
@@ -269,15 +277,15 @@ for ii = 1 : nEL
 end;
 
 % Loop over segments for segment neighbouring elements
-fwrite(fid, ['% Segment neighbours ' nl ]);
-for ii = 1 : nEL
+fwrite(fid, ['% Segment neighbours - SEG_NEIGHBOUR ' nl ]);
+for ii = 1 : nSEG
     
     fwrite (fid, [num2str(ii) ' ' num2str(SEG_NEIGHBOUR(1,ii)) ' ' num2str(SEG_NEIGHBOUR(2,ii)) ' ;' nl ]);
     
 end;
 
 % Loop over nodes for node occurence in elements
-fwrite(fid, ['% Node occurence in elements ' nl ]);
+fwrite(fid, ['% Node occurence in elements - Node_occurence_EL ' nl ]);
 for ii = 1 : nC
     
     fwrite (fid, [num2str(ii) ' ' num2str(Node_occurence_EL(ii,1)) ' ;' nl ]);
@@ -285,7 +293,7 @@ for ii = 1 : nC
 end;
 
 % Loop over nodes for node occurence in segments
-fwrite(fid, ['% Node occurence in segments ' nl ]);
+fwrite(fid, ['% Node occurence in segments - Node_occurence_SEG ' nl ]);
 for ii = 1 : nC
     
     fwrite (fid, [num2str(ii) ' ' num2str(Node_occurence_SEG(ii,1)) ' ;' nl ]);
@@ -293,7 +301,7 @@ for ii = 1 : nC
 end;
 
 % Loop over nodes for elements containing the node
-fwrite(fid, ['% Nodes appearing in elements ' nl ]);
+fwrite(fid, ['% Nodes appearing in elements - Node_EL ' nl ]);
 for ii = 1 : nC
     
     fwrite (fid, [num2str(ii) ' ' num2str(Node_EL(ii,1)) ' ' num2str(Node_EL(ii,2)) ' ' num2str(Node_EL(ii,3)) ' ' num2str(Node_EL(ii,4)) ' ;' nl ]);
@@ -301,7 +309,7 @@ for ii = 1 : nC
 end;
 
 % Loop over nodes for segments containing the node
-fwrite(fid, ['% Nodes appearing in segments ' nl ]);
+fwrite(fid, ['% Nodes appearing in segments - Node_SEG ' nl ]);
 for ii = 1 : nC
     
     fwrite (fid, [num2str(ii) ' ' num2str(Node_SEG(ii,1)) ' ' num2str(Node_SEG(ii,2)) ' ' num2str(Node_SEG(ii,3)) ' ' num2str(Node_SEG(ii,4)) ' ;' nl ]);
@@ -311,7 +319,7 @@ end;
 
 
 % Loop over elements for element types - Q4 --> EL_TIP = 1
-fwrite(fid, ['% Element type ' nl]);
+fwrite(fid, ['% Element type - EL_TIP ' nl]);
 for ii = 1 : nEL
     
     fwrite (fid, [num2str(ii) ' ' num2str(1) ' ;' nl]);
