@@ -101,7 +101,7 @@ for ii = 1 : length (Rubni)
 end;
 
 
-Sila = ( p0 * lgrede/2 ) / ceil(nlelemenata/2);
+Sila = ( p0 * lgrede/2 ) / ceil(nlelemenata/2); %
 
 FV = zeros ( 2 * nC , 1 );
 
@@ -380,9 +380,26 @@ norma_popis = norma_popis ( : , 1 : broj_koraka - Oduzmi );
 
 
 % Normalized total potential energy
-Energy_FEM_normalized = Energy_FEM_popis .* G ./ ( p0^2 * lgrede * hgrede );
+Energy_FEM_normalized = Energy_FEM_popis .* G ./ ( p0^2 * lgrede^2 * hgrede );
+Energy_FEM_normalized = Energy_FEM_normalized ( 2 : end );
+
+Energy_FEM_popis = Energy_FEM_popis ( 2 : end );
+[ ~ , Energy_min ] = min ( Energy_FEM_popis );
+
+
 xy_coordinate_normalized = reshape( xy_popis ( 2 , Tangential_node_x , : ) ./ lgrede , 1 , length(xy_popis) ) ;
+xy_coordinate_normalized = xy_coordinate_normalized ( 2 : end );
+
+xy_coordinate_plot = reshape( xy_popis ( 2 , Tangential_node_x , : ) , 1 , length(xy_popis) ) ;
+xy_coordinate_plot = xy_coordinate_plot ( 2 : end );
 Conf_force_normalised = Conf_popis ( 2 * Tangential_node_x , : ) .* G / ( abs(p0) * lgrede );
+Conf_force_normalised = Conf_force_normalised ( 2 : end );
+
+Conf_force_plot = Conf_popis ( 2 * Tangential_node_x , : );
+Conf_force_plot = Conf_force_plot ( 2 : end );
+
+[ ~ , Conf_force_min ] = min ( abs ( Conf_force_plot ) );
+
 
 
 ELX(2:5,:) = ELX1;
@@ -448,7 +465,59 @@ plot(ELXPLOT3,ELYPLOT3,'k-')
 plot(ELXPLOT1,ELYPLOT1,'r--')
 hold off
 
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% Plotting of configurational force vs. vertical node position - exported
+% from MatLAB figure M-file generator
 
+% Create figure
+figure1 = figure;
+
+% Create axes
+axes1 = axes('Parent',figure1,'FontSize',18);
+box(axes1,'on');
+hold(axes1,'all');
+
+% Create plot
+plot(xy_coordinate_plot,Conf_force_plot,'LineWidth',2);
+plot(xy_coordinate_plot(Conf_force_min),Conf_force_plot(Conf_force_min),'MarkerSize',20,'Marker','+','LineWidth',1.5,'LineStyle','none',...
+    'Color',[1 0 0]);
+
+% Create xlabel
+xlabel('y_A','FontSize',20);
+
+% Create ylabel
+ylabel('G_{y,A}','FontSize',20);
+
+% Create title
+title('Vertical component of configurational force at node A for different node positions',...
+    'FontSize',24);
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% Plotting of total potential energy vs. vertical node position - exported
+% from MatLAB figure M-file generator
+
+% Create figure
+figure2 = figure;
+
+% Create axes
+axes2 = axes('Parent',figure2,'FontSize',18);
+box(axes2,'on');
+hold(axes2,'all');
+
+% Create plot
+plot(xy_coordinate_plot,Energy_FEM_popis,'LineWidth',2);
+plot(xy_coordinate_plot(Energy_min),Energy_FEM_popis(Energy_min),'MarkerSize',20,'Marker','x','LineWidth',1.5,'LineStyle','none',...
+    'Color',[1 0 0]);
+
+% Create xlabel
+xlabel('y_A','FontSize',20);
+
+% Create ylabel
+ylabel('Total potential energy, \Pi','FontSize',20);
+
+% Create title
+title('Total potential energy of the system for different vertical node A positions',...
+    'FontSize',24);
 
 
 

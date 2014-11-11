@@ -28,7 +28,7 @@ p0 = -100;
 
 % Tangential movement of boundary nodes is allowed everywhere apart from
 % the loaded edge: 1 allowed, 0 not allowed
-tang_remesh = 1;
+tang_remesh = 0;
 
 c = 0.05;
 max_koraka = 5000;
@@ -465,9 +465,11 @@ end;
 ELX1PLOT = ELXPLOT2 ( 2:5 , : );
 ELY1PLOT = ELYPLOT2 ( 2:5 , : );
 
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% Plotting the starting and converged meshes
 figure
 hold on
-plot(ELXPLOT,ELYPLOT,'k-')
+plot(ELXPLOT,ELYPLOT,'r--','LineWidth',0.8)
 
 [ELX , ELY , EL ] = formiranje_4kutnihelemenata( xy, nlelemenata, nhelemenata );
 
@@ -477,37 +479,68 @@ ELY1 = ELY(2:5,:);
 ELXPLOT1 = [ELX(2:5,:);ELX(2,:)];
 ELYPLOT1 = [ELY(2:5,:);ELY(2,:)];
 
-plot(ELXPLOT1,ELYPLOT1,'r--')
-hold off
-
-figure 
-hold on
-
-for i = 1:nEL
-    ELXPLOT3 ( 1 , i ) = xyDEF ( 1, EL ( 2 , i ) );
-    ELXPLOT3 ( 2 , i ) = xyDEF ( 1, EL ( 3 , i ) );
-    ELXPLOT3 ( 4 , i ) = xyDEF ( 1, EL ( 5 , i ) );
-    ELXPLOT3 ( 3 , i ) = xyDEF ( 1, EL ( 4 , i ) );
-    ELXPLOT3 ( 5 , i ) = xyDEF ( 1, EL ( 2 , i ) );
-end;
-for i = 1:nEL
-    ELYPLOT3 ( 1 , i ) = xyDEF ( 2, EL ( 2 , i ) );
-    ELYPLOT3 ( 2 , i ) = xyDEF ( 2, EL ( 3 , i ) );
-    ELYPLOT3 ( 4 , i ) = xyDEF ( 2, EL ( 5 , i ) );
-    ELYPLOT3 ( 3 , i ) = xyDEF ( 2, EL ( 4 , i ) );
-    ELYPLOT3 ( 5 , i ) = xyDEF ( 2, EL ( 2 , i ) );
-end;
-
-plot(ELXPLOT3,ELYPLOT3,'k-')
-plot(ELXPLOT1,ELYPLOT1,'r--')
+plot(ELXPLOT1,ELYPLOT1,'k-','LineWidth',1.5)
 hold off
 
 
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% Plotting of potential energy vs. step number
+
+% Create figure
+figure1 = figure;
+
+% Create axes
+axes1 = axes('Parent',figure1,'FontSize',18);
+box(axes1,'on');
+hold(axes1,'all');
+
+% Create plot
+plot(1:broj_koraka-1,Energy_FEM_popis,'b-','LineWidth',2);
+% plot(Energy_FEM_popis_notang,'k--','LineWidth',2);
+
+
+% Create xlabel
+xlabel('Step number','FontSize',20);
+
+% Create ylabel
+ylabel('Total potential energy, \pi','FontSize',20);
+
+% Create title
+title('Change of total potential energy through iterations',...
+    'FontSize',24);
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% Plotting the deformed meshes
+
+% figure 
+% hold on
+% 
+% for i = 1:nEL
+%     ELXPLOT3 ( 1 , i ) = xyDEF ( 1, EL ( 2 , i ) );
+%     ELXPLOT3 ( 2 , i ) = xyDEF ( 1, EL ( 3 , i ) );
+%     ELXPLOT3 ( 4 , i ) = xyDEF ( 1, EL ( 5 , i ) );
+%     ELXPLOT3 ( 3 , i ) = xyDEF ( 1, EL ( 4 , i ) );
+%     ELXPLOT3 ( 5 , i ) = xyDEF ( 1, EL ( 2 , i ) );
+% end;
+% for i = 1:nEL
+%     ELYPLOT3 ( 1 , i ) = xyDEF ( 2, EL ( 2 , i ) );
+%     ELYPLOT3 ( 2 , i ) = xyDEF ( 2, EL ( 3 , i ) );
+%     ELYPLOT3 ( 4 , i ) = xyDEF ( 2, EL ( 5 , i ) );
+%     ELYPLOT3 ( 3 , i ) = xyDEF ( 2, EL ( 4 , i ) );
+%     ELYPLOT3 ( 5 , i ) = xyDEF ( 2, EL ( 2 , i ) );
+% end;
+% 
+% plot(ELXPLOT3,ELYPLOT3,'k-')
+% plot(ELXPLOT1,ELYPLOT1,'r--')
+% hold off
 
 
 
+xy_popis_plot = xy_popis ( : , : , 1 : 20 : broj_koraka - Oduzmi );
+pomak_popis_plot = pomak_popis ( : , 1 : 20 : broj_koraka - Oduzmi );
+Conf_popis_plot = Conf_popis ( : , 1 : 20 : broj_koraka - Oduzmi );
+Scale_factor = 0.1;
 
-
-
+Q4_Conf_force_to_VTK_force_only(nC,nEL,xy_popis_plot,EL,pomak_popis_plot,length(1 : 20 : broj_koraka - Oduzmi),Conf_popis_plot,Scale_factor,Internal_node)
 
 
