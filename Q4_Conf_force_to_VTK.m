@@ -1,11 +1,11 @@
-function Q4_Conf_force_to_VTK(nC,nEL,xy_popis,EL,SLIKA_pomaka,broj_koraka,Stress_point)
+function Q4_Conf_force_to_VTK(nC,nEL,xy_popis,EL,SLIKA_pomaka,broj_koraka,Stress_point,Conf_popis)
 
 
 for k = 1 : broj_koraka
     
     trenutni_xy = xy_popis(:,:,k);
 
-textfilename = ['vizualizacija\Cforce_test_' num2str(k) '.vtk'];
+textfilename = ['vizualizacija\Cforce_Mueller2_' num2str(k) '.vtk'];
 fid = fopen(textfilename, 'w');
 
 % fid = fopen('uncoupled_Q4_INT4.vtk', 'w');
@@ -18,7 +18,7 @@ end
 nl = sprintf('\n'); % Stupid matlab doesn't interpret \n normally.
 
 % Write the file header.
-fwrite(fid, ['# vtk DataFile Version 2.0' nl  'Configurational force testing' nl 'ASCII' nl ...
+fwrite(fid, ['# vtk DataFile Version 2.0' nl  'Configurational force printout' nl 'ASCII' nl ...
     'DATASET UNSTRUCTURED_GRID' nl 'FIELD FieldData 1 ' nl 'TIME 1 1 double' nl ' ' num2str(k-1) nl]);
 
 % Loop over nodes for point coordinates
@@ -53,6 +53,18 @@ for ii = 1 : nC
      fwrite (fid, [num2str(SLIKA_pomaka(2*ii-1,k)) ' ' num2str(SLIKA_pomaka(2*ii,k)) ' 0.0' nl ]);
     
 end;
+
+
+% Loop over nodes for point data - configurational forces
+fwrite(fid, ['VECTORS CONFIGURATIONAL_FORCE float' nl ]);
+for ii = 1 : nC
+    
+     fwrite (fid, [num2str(Conf_popis(2*ii-1,k)) ' ' num2str(Conf_popis(2*ii,k)) ' 0.0' nl ]);
+    
+end;
+
+
+
 
 % Loop over nodes for point data - stress at nodes
 
