@@ -44,7 +44,7 @@ p0 = 10^7;
 % Sila defines a concentrated load
 % Sila = -100;
 
-max_koraka = 16;
+max_koraka = 2;
 tol = 10^-4;
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -157,6 +157,7 @@ Bmatrica_save = zeros ( nEL * rlength , 24 );
 Bmatrica2_save = zeros ( nEL * rlength , 32 );
 Pomaci_elementa = zeros ( 8 , 1 );
 xy_popis = cell ( max_koraka , 1 );
+EL_popis = zeros ( 5 , nEL , max_koraka );
 pomak_popis = cell ( max_koraka , 1 );
 Conf_popis = cell ( max_koraka , 1 );
 Energy_FEM_popis = zeros ( 1 , max_koraka );
@@ -581,9 +582,12 @@ end;
 % Post-processing variables
 
 xy_popis { broj_koraka } = xy;
+EL_popis ( : , : , broj_koraka ) = EL;
 pomak_popis { broj_koraka } = pomak;
 Conf_popis { broj_koraka } = Conf_force;
 Energy_FEM_popis ( broj_koraka ) = Energy_FEM;
+Node_number ( broj_koraka ) = nC;
+Node_occurence { broj_koraka } = Node_occurence_EL; 
 % J_integral_num ( broj_koraka ) = -Conf_force ( Crack_tip * 2 );
 
 if broj_koraka ~= 1
@@ -598,14 +602,14 @@ if rem ( broj_koraka , 1 ) == 0
     
 end;
 
-if broj_koraka == 1 || rem ( broj_koraka , 100 ) == 0
+% if broj_koraka == 1 || broj_koraka == 2
     
     Usporedba_korak = cat(3,Usporedba_korak, broj_koraka);
     Naprezanja_korak = cat(3,Naprezanja_korak , Naprezanja);
     Deformacije_korak = cat(3,Deformacije_korak , Deformacije );
     detJacob_korak = cat(3,detJacob_korak , detJacob_save );
     
-end;
+% end;
 
 end;
 
@@ -677,15 +681,19 @@ end;
 
 end;
 
-for ii = 1 : nC
+% for ii = 1 : nC
     
-    Node_occurence ( ii , 1 ) = sum ( sum ( ii == EL ( 2:5 , : ) ) );
+    % Node_occurence ( ii , 1 ) = sum ( sum ( ii == EL ( 2:5 , : ) ) );
     
-end;
+% end;
+%%%%%%%%%%%%%%%%%%%%%%% IMAM LI 0/0?
+for jj = 1 : length ( Usporedba_korak )
 
-for ii = 1 : nC
+for ii = 1 : Node_number ( jj )
     
-    Stress_point ( ii , : , : ) = Stress_point ( ii , : , : ) ./ Node_occurence ( ii );
+    Stress_point ( ii , : , jj ) = Stress_point ( ii , : , jj ) ./ Node_occurence{jj} ( ii );
+
+end;
 
 end;
 
@@ -774,9 +782,9 @@ plot(ELXPLOT3,ELYPLOT3,'k-')
 % plot(ELXPLOT1,ELYPLOT1,'r--')
 hold off
 
-% Q4_Conf_force_to_VTK(nC,nEL,xy_popis(:,:,reshape(Usporedba_korak,1,length(Usporedba_korak))),EL,pomak_popis(:,reshape(Usporedba_korak,1,length(Usporedba_korak))),length(Usporedba_korak),Stress_point)
+%Q4_Conf_force_to_VTK(461,400,xy_popis{1},EL_popis(:,:,1),pomak_popis{1},1,Stress_point(:,:,1),Conf_popis{1})
 
-
+Q4_Conf_force_to_VTK_propagation(Node_number,nEL,xy_popis,EL_popis,pomak_popis,length(Usporedba_korak),Stress_point,Conf_popis)
 
 
 
