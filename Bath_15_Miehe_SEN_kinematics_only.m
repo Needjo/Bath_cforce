@@ -44,7 +44,7 @@ p0 = 10^7;
 % Sila defines a concentrated load
 % Sila = -100;
 
-max_koraka = 2;
+max_koraka = 15;
 tol = 10^-4;
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -672,10 +672,10 @@ for jj = 1 : length(Usporedba_korak)
 
 for ii = 1 : nEL
     
-    Stress_point ( EL ( 2 , ii ) , 1:5 , jj ) = Stress_point ( EL ( 2 , ii ) , 1:5 , jj ) + Stress_recovery ( (ii-1)*rlength+1 , : , jj );
-    Stress_point ( EL ( 3 , ii ) , 1:5 , jj ) = Stress_point ( EL ( 3 , ii ) , 1:5 , jj ) + Stress_recovery ( (ii-1)*rlength+2 , : , jj );
-    Stress_point ( EL ( 4 , ii ) , 1:5 , jj ) = Stress_point ( EL ( 4 , ii ) , 1:5 , jj ) + Stress_recovery ( (ii-1)*rlength+3 , : , jj );
-    Stress_point ( EL ( 5 , ii ) , 1:5 , jj ) = Stress_point ( EL ( 5 , ii ) , 1:5 , jj ) + Stress_recovery ( (ii-1)*rlength+4 , : , jj );
+    Stress_point ( EL_popis ( 2 , ii , jj ) , 1:5 , jj ) = Stress_point ( EL_popis ( 2 , ii , jj ) , 1:5 , jj ) + Stress_recovery ( (ii-1)*rlength+1 , : , jj );
+    Stress_point ( EL_popis ( 3 , ii , jj ) , 1:5 , jj ) = Stress_point ( EL_popis ( 3 , ii , jj ) , 1:5 , jj ) + Stress_recovery ( (ii-1)*rlength+2 , : , jj );
+    Stress_point ( EL_popis ( 4 , ii , jj ) , 1:5 , jj ) = Stress_point ( EL_popis ( 4 , ii , jj ) , 1:5 , jj ) + Stress_recovery ( (ii-1)*rlength+3 , : , jj );
+    Stress_point ( EL_popis ( 5 , ii , jj ) , 1:5 , jj ) = Stress_point ( EL_popis ( 5 , ii , jj ) , 1:5 , jj ) + Stress_recovery ( (ii-1)*rlength+4 , : , jj );
     
 end;
 
