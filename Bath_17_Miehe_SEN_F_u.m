@@ -34,6 +34,7 @@ Notch_direction = 3;
 
 E = 2 * 80000000000 * ( 1 + 0.3 );
 Nu = 0.3;
+J_integral_critical = 100;
 
 % Lame constants calculation for comparison with paper
 G = E/(2*(1+Nu));
@@ -140,6 +141,12 @@ FV(2*(nlelemenata+2)-1)=Sila/2;
 FV(1) = -Sila/2;
 FV(2*(nC-nlelemenata)-1) = -Sila/2;
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% 
+
+qe = zeros ( 2*nC , 1 );
+qe ( FV == Sila ) = 1;
+qe ( FV == -Sila ) = -1;
+qe ( FV == Sila/2 ) = 1/2;
+qe ( FV == -Sila/2 ) = -1/2;
   
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % Preallocation of data for analysis
@@ -162,7 +169,7 @@ pomak_popis = cell ( max_koraka , 1 );
 Conf_popis = cell ( max_koraka , 1 );
 Energy_FEM_popis = zeros ( 1 , max_koraka );
 norma_popis = zeros ( 1 , max_koraka );
-J_integral_num = zeros ( 1 , max_koraka );
+J_integral_num = 0;
 Oduzmi = 0;
 
 Usporedba_korak = [  ];
@@ -170,16 +177,300 @@ Naprezanja_korak = [  ];
 Deformacije_korak = [  ];
 detJacob_korak = [  ];
 
+flag_cracked = 0;
+flag_stable_crack = 1;
+lambda = 0;
+prirast_lambda = 10000;
+g_residual = zeros ( 2*nC , 1 );
+prirast_pomak = zeros ( 2*nC , 1 );
+pomak = zeros ( 2*nC , 1 );
+qi = zeros ( 2 * nC , 1 );
+broj_vremenskih_koraka = 0;
+broj_crackova = 0;
+duljina_rubnog = length ( Rubni );
+CMOD = 0;
+Load_CMOD = 0;
+
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % Beginning of loop over elements for mesh improvement - NODE SHIFTING
 
-for broj_koraka = 1 : max_koraka
+while flag_cracked == 0 
     
-    if broj_koraka ~= 1
+    if flag_stable_crack == 1
+    
+    broj_vremenskih_koraka = broj_vremenskih_koraka + 1;
+    disp(['Broj vremenskih koraka: ',num2str(broj_vremenskih_koraka)])
+    
+    lambda = lambda + prirast_lambda;
+    broj_iteracija = 0;
+    g_residual = zeros ( 2 * nC , 1 );
+    
+    else
+        
+        broj_iteracija = 0;
+        g_residual = zeros ( 2 * nC , 1 );
+        disp(['Nestabilna pukotina '])
+        
+    end;
+    
+    while norm(g_residual) >= tol || norm(prirast_pomak) >= tol || broj_iteracija == 0
+    % Petlja za konvergenciju fizikalnog koraka - Newton-Raphson
+    
+    broj_iteracija = broj_iteracija + 1;
+    disp(['Broj iteracija: ',num2str(broj_iteracija)])
+
+    
+    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    % Local stiffness matrix calculation - linear elastic isotropic elements
+    % Shape functions, their derivatives and Bmatrices saved for later use
+    
+    Kl = zeros ( 8 , 8 , nEL );
+    qi_temp = zeros ( 8 , nEL );
+    
+    for jj=1:nEL
+        
+        Klok = zeros ( 8 , 8 );
+        
+        
+        for ii=1:rlength
+            
+            [shape4lin,drshape4lin,dsshape4lin] = iso4lin(rgauss(ii), sgauss(ii));
+            
+            Jacobiana = jacobiana ( ELX1 ( :, jj ), ELY1 ( : , jj ) , drshape4lin , dsshape4lin );
+            invJacob = inv ( Jacobiana );
+            detJacob = det ( Jacobiana );
+            
+            [dxshape4lin,dyshape4lin] = globderiv (invJacob,drshape4lin,dsshape4lin);
+            
+            Bmatrica = formiranjeBmatrice_pstrain2 ( dxshape4lin , dyshape4lin );
+            Bmatrica2 = formiranjeBmatrice_pstrain2_Eshelby ( dxshape4lin , dyshape4lin );
+            
+            Klok = Klok  + Bmatrica' * Cmatrica * Bmatrica * wgauss (ii) * detJacob * tgrede ;
+            
+            shape4lin_save ( (jj-1)*rlength + ii , : ) = shape4lin;
+            detJacob_save ( (jj-1)*rlength + ii , : ) = detJacob;
+            dxshape4lin_save ( (jj-1)*rlength + ii , : ) = dxshape4lin;
+            dyshape4lin_save ( (jj-1)*rlength + ii , : ) = dyshape4lin;
+            Bmatrica_save ( (jj-1)*rlength + ii , : ) = reshape(Bmatrica, 1 , 24);
+            Bmatrica2_save ( (jj-1)*rlength + ii , : ) = reshape(Bmatrica2, 1 , 32);
+            
+        end;
+        
+        Kl (:,:,jj) = Klok;
+        qi_temp(:,jj) = Klok * [ pomak(2*EL(2,jj)-1); pomak(2*EL(2,jj)); pomak(2*EL(3,jj)-1); pomak(2*EL(3,jj)); pomak(2*EL(4,jj)-1); pomak(2*EL(4,jj)); pomak(2*EL(5,jj)-1); pomak(2*EL(5,jj)) ];
+        
+    end;
+    
+    
+    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    % Global stiffness matrix calculation
+    
+    Kg_prije = globmatkrutosti_brzi ( Kl , EL , nC );
+    Kg = rubni_globmat_brzi ( Kg_prije , Rubni , nC );
+    
+    if broj_vremenskih_koraka == 1 
+        
+        cond_prvi = condest ( Kg );
+        
+    end;
+    
+    if abs (condest ( Kg ) - cond_prvi) >  10000
+        
+        flag_cracked = 1;
+        break
+        
+    end;
+    
+%     disp(['Condest: ',num2str(condest(Kg))])
+    
+    qi = zeros ( 2 * nC , 1 );
+    
+    for jj = 1 : nEL
+        
+        qi ( 2 * EL ( 2 , jj ) - 1 , 1 ) = qi ( 2 * EL ( 2 , jj ) - 1 ) + qi_temp(1,jj);
+        qi ( 2 * EL ( 2 , jj ) , 1 ) = qi ( 2 * EL ( 2 , jj ) ) + qi_temp(2,jj);
+        qi ( 2 * EL ( 3 , jj ) - 1 , 1 ) = qi ( 2 * EL ( 3 , jj ) - 1 ) + qi_temp(3,jj);
+        qi ( 2 * EL ( 3 , jj ) , 1 ) = qi ( 2 * EL ( 3 , jj ) ) + qi_temp(4,jj);
+        qi ( 2 * EL ( 4 , jj ) - 1 , 1 ) = qi ( 2 * EL ( 4 , jj ) - 1 ) + qi_temp(5,jj);
+        qi ( 2 * EL ( 4 , jj ) , 1 ) = qi ( 2 * EL ( 4 , jj ) ) + qi_temp(6,jj);
+        qi ( 2 * EL ( 5 , jj ) - 1 , 1 ) = qi ( 2 * EL ( 5 , jj ) - 1 ) + qi_temp(7,jj);
+        qi ( 2 * EL ( 5 , jj ) , 1 ) = qi ( 2 * EL ( 5 , jj ) ) + qi_temp(8,jj);
+        
+    end;
+
+    g_residual = qi - lambda * qe;
+    
+    %         Uvodimo rubne uvjete u rezidual
+            
+    for j = 1 : duljina_rubnog
+
+                if Rubni ( 2 , j ) == 0
+
+                    g_residual ( 2 * Rubni ( 1 , j ) - 1 ) = 0;
+
+                end;
+
+                if Rubni ( 3 , j ) == 0
+
+                    g_residual ( 2 * Rubni ( 1 , j ) ) = 0;
+
+                end;
+
+            end;
+
+    
+    
+    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    % Linear equation system solver
+    
+    prirast_pomak = - Kg \ g_residual;
+    
+    pomak = pomak + prirast_pomak;
+
+    
+    end;
+    % Konvergirao je fizikalni korak! 
+    
+    
+    if flag_cracked == 1
+        
+        break
+        
+    end;
+    
+    Crack_mouth = find ( abs(xy(1,:)-lgrede/2)<0.001 & abs(xy(2,:)<0.001) );
+    CMOD ( end + 1 ) = pomak( Crack_mouth(2)*2-1 ) - pomak( Crack_mouth(1)*2-1 );
+    
+    Load_CMOD ( end + 1 ) = lambda;
+    
+    disp(['Konvergirao je korak, lambda: ',num2str(lambda),' i pomak: ',num2str(pomak(2*22-1,1))])
+
+    
+%     Pocinje materijalni proracun
+    
+    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    % Element strain, stress, Eshelby stress and configurational force
+    % calculation for Gaussian points
+    
+    Conf_force_local = zeros ( 8 , nEL );
+    
+    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    % Loop over elements
+    
+    for j=1:nEL
+        
+        Conf_force = zeros ( 8 , 1 );
+        
+        %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+        % Local displacements for each element are defined
+        
+        for k = 1 : 4
+            
+            Pomaci_elementa ( 2 * k - 1 , 1 ) = pomak ( EL ( 1 + k , j ) * 2 - 1 );
+            Pomaci_elementa ( 2 * k , 1 ) = pomak ( EL ( 1 + k , j ) * 2 );
+            
+        end;
+        
+        %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+        % Loop over integration points
+        
+        for i=1:rlength
+            
+            hh = ( j - 1 ) * rlength + i;
+            
+            %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+            % Local stress and strain vectors with integration point locations
+            
+            def_lok = reshape ( Bmatrica_save(hh,:) , 3 , 8 ) * Pomaci_elementa;
+            nap_lok = Cmatrica * def_lok;
+            
+            glob_Gauss_tocke = shape4lin_save ( hh , : ) * [ ELX1(:,j), ELY1(:,j) ];
+            
+            Naprezanja ( hh , : ) = [ glob_Gauss_tocke , nap_lok' ];
+            Deformacije ( hh , : ) = [ glob_Gauss_tocke , def_lok' ];
+            
+            %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+            % Deformation gradient and strain energy density in integration
+            % point
+            
+            Def_grad_lista ( hh , : ) = [ 1+dxshape4lin_save(hh,:)*Pomaci_elementa(1:2:8),  dyshape4lin_save(hh,:)*Pomaci_elementa(1:2:8) , dxshape4lin_save(hh,:)*Pomaci_elementa(2:2:8) , 1+dyshape4lin_save(hh,:)*Pomaci_elementa(2:2:8) ];
+            W ( hh , : ) = 0.5 * Naprezanja( hh , 3:5 ) * Deformacije( hh , 3:5 )';
+            
+            %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+            % Eshelby stress in integration point
+            
+            Eshelby2 ( hh , 1 ) = W ( hh ) - Naprezanja ( hh , 3 ) * Def_grad_lista ( hh , 1 )  + Naprezanja ( hh , 3 ) - Naprezanja ( hh , 5 ) * Def_grad_lista ( hh , 3 );
+            Eshelby2 ( hh , 2 ) = - Naprezanja ( hh , 5 ) * Def_grad_lista ( hh , 1 ) + Naprezanja ( hh , 5 ) - Naprezanja ( hh , 4 ) * Def_grad_lista ( hh , 3 );
+            Eshelby2 ( hh , 3 ) = - Naprezanja ( hh , 3 ) * Def_grad_lista ( hh , 2 ) - Naprezanja ( hh , 5 ) * Def_grad_lista ( hh , 4 ) + Naprezanja ( hh , 5 );
+            Eshelby2 ( hh , 4 ) = W ( hh ) - Naprezanja ( hh , 5 ) * Def_grad_lista ( hh , 2 ) - Naprezanja ( hh , 4 ) * Def_grad_lista ( hh , 4 ) + Naprezanja ( hh , 4 );
+            
+            %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+            % Configuration force Gaussian integration
+            
+            Conf_force = Conf_force  + reshape(Bmatrica2_save(hh,:),4,8)' * [ Eshelby2((j-1)*rlength+i,1) Eshelby2((j-1)*rlength+i,4) Eshelby2((j-1)*rlength+i,2:3) ]' * wgauss (i) * detJacob_save ( hh ) * tgrede ;
+            
+            
+        end;
+        
+        %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+        % Configurational forces for each element - ready for assembling
+        
+        Conf_force_local (:,j) = Conf_force;
+        
+    end;
+    
+    % Total potential energy calculation for the whole problem and strain
+    % energy calculation for each integration point
+    
+    Energy_FEM = 0.5 * pomak' * Kg * pomak - pomak' * lambda*qe;
+    
+    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    % Assembly of configurational forces
+    
+    Conf_force = zeros ( 2 * nC , 1 );
+    
+    for j = 1 : nEL
+        
+        Conf_force ( 2 * EL ( 2 , j ) - 1 , 1 ) = Conf_force ( 2 * EL ( 2 , j ) - 1 ) + Conf_force_local( 1 , j );
+        Conf_force ( 2 * EL ( 2 , j ) , 1 ) = Conf_force ( 2 * EL ( 2 , j ) ) + Conf_force_local( 2 , j );
+        Conf_force ( 2 * EL ( 3 , j ) - 1 , 1 ) = Conf_force ( 2 * EL ( 3 , j ) - 1 ) + Conf_force_local( 3 , j );
+        Conf_force ( 2 * EL ( 3 , j ) , 1 ) = Conf_force ( 2 * EL ( 3 , j ) ) + Conf_force_local( 4 , j );
+        Conf_force ( 2 * EL ( 4 , j ) - 1 , 1 ) = Conf_force ( 2 * EL ( 4 , j ) - 1 ) + Conf_force_local( 5 , j );
+        Conf_force ( 2 * EL ( 4 , j ) , 1 ) = Conf_force ( 2 * EL ( 4 , j ) ) + Conf_force_local( 6 , j );
+        Conf_force ( 2 * EL ( 5 , j ) - 1 , 1 ) = Conf_force ( 2 * EL ( 5 , j ) - 1 ) + Conf_force_local( 7 , j );
+        Conf_force ( 2 * EL ( 5 , j ) , 1 ) = Conf_force ( 2 * EL ( 5 , j ) ) + Conf_force_local( 8 , j );
+        
+    end;
+
+   
+%     Materijalni proracun je konvergirao
+    
+    
+    
+    
+    
+    if broj_vremenskih_koraka == 37 && broj_crackova == 2
+                
+        J_integral_critical = 1000;
+        
+    elseif broj_vremenskih_koraka == 52 && broj_crackova == 5
+                
+        J_integral_critical = 15000;
+        
+    end;
+    
+%     Pocinje provjera crackinga
+%     if broj_vremenskih_koraka ~= 1
         
         [ J_integral , Crack_tip ] = max ( abs ( Conf_force ) );
         
-        J_integral_num ( broj_koraka - 1 ) = -Conf_force ( Crack_tip );
+        J_integral_num ( end + 1 ) = -Conf_force ( Crack_tip );
+        
+        if J_integral_num ( end ) > J_integral_critical
+            
+            flag_stable_crack = 0;
+            broj_crackova = broj_crackova + 1;
+            disp(['Crack! : ',num2str(broj_crackova)])
                 
         if rem ( Crack_tip , 2 ) == 0
             
@@ -282,7 +573,8 @@ for broj_koraka = 1 : max_koraka
                 Rubni(1,ii) = Rubni(1,ii) + 1;
             end;    
         end;
-        FV = [ FV(1:2*Crack_tip,1); [0;0]; FV(2*Crack_tip+1:end) ]; 
+        qe = [ qe(1:2*Crack_tip,1); [0;0]; qe(2*Crack_tip+1:end) ];
+        pomak = [ pomak(1:2*Crack_tip,1); pomak(2*Crack_tip-1:2*Crack_tip); pomak(2*Crack_tip+1:end) ];
 
         % Finding the element which retains the old node Crack_tip
         Keeper = find ( sum( repmat(Seg_tip,4,nEL) ==  EL_SEG ) > 0 & sum ( repmat(Crack_tip,4,nEL) ==  EL(2:5,:) ) );
@@ -380,204 +672,67 @@ for broj_koraka = 1 : max_koraka
             
         end;
 
+
+    
+    % The new nodes need to be fed into the stiffness matrix
+    for ii = 1:nEL
+        ELX ( 1 , ii ) = EL ( 1 , ii );
+        ELX ( 2 , ii ) = xy ( 1, EL ( 2 , ii ) );
+        ELX ( 3 , ii ) = xy ( 1, EL ( 3 , ii ) );
+        ELX ( 5 , ii ) = xy ( 1, EL ( 5 , ii ) );
+        ELX ( 4 , ii ) = xy ( 1, EL ( 4 , ii ) );
+    end;
+    for ii = 1:nEL
+        ELY ( 1 , ii ) = EL ( 1 , ii );
+        ELY ( 2 , ii ) = xy ( 2, EL ( 2 , ii ) );
+        ELY ( 3 , ii ) = xy ( 2, EL ( 3 , ii ) );
+        ELY ( 5 , ii ) = xy ( 2, EL ( 5 , ii ) );
+        ELY ( 4 , ii ) = xy ( 2, EL ( 4 , ii ) );
     end;
     
-% The new nodes need to be fed into the stiffness matrix    
-for ii = 1:nEL
-    ELX ( 1 , ii ) = EL ( 1 , ii );
-    ELX ( 2 , ii ) = xy ( 1, EL ( 2 , ii ) );
-    ELX ( 3 , ii ) = xy ( 1, EL ( 3 , ii ) );
-    ELX ( 5 , ii ) = xy ( 1, EL ( 5 , ii ) );
-    ELX ( 4 , ii ) = xy ( 1, EL ( 4 , ii ) );
-end;
-for ii = 1:nEL
-    ELY ( 1 , ii ) = EL ( 1 , ii );
-    ELY ( 2 , ii ) = xy ( 2, EL ( 2 , ii ) );
-    ELY ( 3 , ii ) = xy ( 2, EL ( 3 , ii ) );
-    ELY ( 5 , ii ) = xy ( 2, EL ( 5 , ii ) );
-    ELY ( 4 , ii ) = xy ( 2, EL ( 4 , ii ) );
-end;
-
-
-ELX1 = ELX(2:5,:);
-ELY1 = ELY(2:5,:);    
+    
+    ELX1 = ELX(2:5,:);
+    ELY1 = ELY(2:5,:);
     
     
-    
-    
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-% Local stiffness matrix calculation - linear elastic isotropic elements
-% Shape functions, their derivatives and Bmatrices saved for later use
-
-Kl = zeros ( 8 , 8 , nEL );
-
-for jj=1:nEL
-    
-    Klok = zeros ( 8 , 8 );
+        else
+%             Stable crack case
+            flag_stable_crack = 1;
             
-        for ii=1:rlength
-        
-            [shape4lin,drshape4lin,dsshape4lin] = iso4lin(rgauss(ii), sgauss(ii));
-       
-            Jacobiana = jacobiana ( ELX1 ( :, jj ), ELY1 ( : , jj ) , drshape4lin , dsshape4lin );
-            invJacob = inv ( Jacobiana );
-            detJacob = det ( Jacobiana );
-        
-            [dxshape4lin,dyshape4lin] = globderiv (invJacob,drshape4lin,dsshape4lin);      
-    
-            Bmatrica = formiranjeBmatrice_pstrain2 ( dxshape4lin , dyshape4lin );
-            Bmatrica2 = formiranjeBmatrice_pstrain2_Eshelby ( dxshape4lin , dyshape4lin );
-        
-            Klok = Klok  + Bmatrica' * Cmatrica * Bmatrica * wgauss (ii) * detJacob * tgrede ;
-            
-            shape4lin_save ( (jj-1)*rlength + ii , : ) = shape4lin;
-            detJacob_save ( (jj-1)*rlength + ii , : ) = detJacob;
-            dxshape4lin_save ( (jj-1)*rlength + ii , : ) = dxshape4lin;
-            dyshape4lin_save ( (jj-1)*rlength + ii , : ) = dyshape4lin;
-            Bmatrica_save ( (jj-1)*rlength + ii , : ) = reshape(Bmatrica, 1 , 24);
-            Bmatrica2_save ( (jj-1)*rlength + ii , : ) = reshape(Bmatrica2, 1 , 32);
-                        
         end;
-    
-    Kl (:,:,jj) = Klok;
-    
-end;
-
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-% Global stiffness matrix calculation
-
-Kg_prije = globmatkrutosti_brzi ( Kl , EL , nC );
-Kg = rubni_globmat_brzi ( Kg_prije , Rubni , nC );
-      
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-% Linear equation system solver
-
-pomak = Kg \ FV;
-
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-% Element strain, stress, Eshelby stress and configurational force
-% calculation for Gaussian points
-
-Conf_force_local = zeros ( 8 , nEL );
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-% Loop over elements
-
-for j=1:nEL
-    
-    Conf_force = zeros ( 8 , 1 );
-    
-    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-    % Local displacements for each element are defined
-    
-    for k = 1 : 4
         
-        Pomaci_elementa ( 2 * k - 1 , 1 ) = pomak ( EL ( 1 + k , j ) * 2 - 1 );
-        Pomaci_elementa ( 2 * k , 1 ) = pomak ( EL ( 1 + k , j ) * 2 );
-        
-    end;
-
-    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-    % Loop over integration points
+%     end;
     
-    for i=1:rlength
-        
-        hh = ( j - 1 ) * rlength + i;
-        
-        %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-        % Local stress and strain vectors with integration point locations
-
-        def_lok = reshape ( Bmatrica_save(hh,:) , 3 , 8 ) * Pomaci_elementa;
-        nap_lok = Cmatrica * def_lok;
-        
-        glob_Gauss_tocke = shape4lin_save ( hh , : ) * [ ELX1(:,j), ELY1(:,j) ];
-
-        Naprezanja ( hh , : ) = [ glob_Gauss_tocke , nap_lok' ];
-        Deformacije ( hh , : ) = [ glob_Gauss_tocke , def_lok' ];
-
-        %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-        % Deformation gradient and strain energy density in integration
-        % point
-        
-        Def_grad_lista ( hh , : ) = [ 1+dxshape4lin_save(hh,:)*Pomaci_elementa(1:2:8),  dyshape4lin_save(hh,:)*Pomaci_elementa(1:2:8) , dxshape4lin_save(hh,:)*Pomaci_elementa(2:2:8) , 1+dyshape4lin_save(hh,:)*Pomaci_elementa(2:2:8) ];
-        W ( hh , : ) = 0.5 * Naprezanja( hh , 3:5 ) * Deformacije( hh , 3:5 )';
-
-        %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-        % Eshelby stress in integration point
-
-        Eshelby2 ( hh , 1 ) = W ( hh ) - Naprezanja ( hh , 3 ) * Def_grad_lista ( hh , 1 )  + Naprezanja ( hh , 3 ) - Naprezanja ( hh , 5 ) * Def_grad_lista ( hh , 3 );
-        Eshelby2 ( hh , 2 ) = - Naprezanja ( hh , 5 ) * Def_grad_lista ( hh , 1 ) + Naprezanja ( hh , 5 ) - Naprezanja ( hh , 4 ) * Def_grad_lista ( hh , 3 );
-        Eshelby2 ( hh , 3 ) = - Naprezanja ( hh , 3 ) * Def_grad_lista ( hh , 2 ) - Naprezanja ( hh , 5 ) * Def_grad_lista ( hh , 4 ) + Naprezanja ( hh , 5 );
-        Eshelby2 ( hh , 4 ) = W ( hh ) - Naprezanja ( hh , 5 ) * Def_grad_lista ( hh , 2 ) - Naprezanja ( hh , 4 ) * Def_grad_lista ( hh , 4 ) + Naprezanja ( hh , 4 );
-
-        %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-        % Configuration force Gaussian integration
-        
-        Conf_force = Conf_force  + reshape(Bmatrica2_save(hh,:),4,8)' * [ Eshelby2((j-1)*rlength+i,1) Eshelby2((j-1)*rlength+i,4) Eshelby2((j-1)*rlength+i,2:3) ]' * wgauss (i) * detJacob_save ( hh ) * tgrede ;
-
-
-    end;
     
-    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-    % Configurational forces for each element - ready for assembling
-        
-    Conf_force_local (:,j) = Conf_force;
-    
-end;
 
-% Total potential energy calculation for the whole problem and strain
-% energy calculation for each integration point
-
-Energy_FEM = 0.5 * pomak' * Kg * pomak - pomak' * FV;
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-% Assembly of configurational forces 
-
-Conf_force = zeros ( 2 * nC , 1 );
-
-for j = 1 : nEL
-    
-    Conf_force ( 2 * EL ( 2 , j ) - 1 , 1 ) = Conf_force ( 2 * EL ( 2 , j ) - 1 ) + Conf_force_local( 1 , j );
-    Conf_force ( 2 * EL ( 2 , j ) , 1 ) = Conf_force ( 2 * EL ( 2 , j ) ) + Conf_force_local( 2 , j );
-    Conf_force ( 2 * EL ( 3 , j ) - 1 , 1 ) = Conf_force ( 2 * EL ( 3 , j ) - 1 ) + Conf_force_local( 3 , j );
-    Conf_force ( 2 * EL ( 3 , j ) , 1 ) = Conf_force ( 2 * EL ( 3 , j ) ) + Conf_force_local( 4 , j );
-    Conf_force ( 2 * EL ( 4 , j ) - 1 , 1 ) = Conf_force ( 2 * EL ( 4 , j ) - 1 ) + Conf_force_local( 5 , j );
-    Conf_force ( 2 * EL ( 4 , j ) , 1 ) = Conf_force ( 2 * EL ( 4 , j ) ) + Conf_force_local( 6 , j );
-    Conf_force ( 2 * EL ( 5 , j ) - 1 , 1 ) = Conf_force ( 2 * EL ( 5 , j ) - 1 ) + Conf_force_local( 7 , j );
-    Conf_force ( 2 * EL ( 5 , j ) , 1 ) = Conf_force ( 2 * EL ( 5 , j ) ) + Conf_force_local( 8 , j );
-    
-end;
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % Post-processing variables
 
-xy_popis { broj_koraka } = xy;
-EL_popis ( : , : , broj_koraka ) = EL;
-pomak_popis { broj_koraka } = pomak;
-Conf_popis { broj_koraka } = Conf_force;
-Energy_FEM_popis ( broj_koraka ) = Energy_FEM;
-Node_number ( broj_koraka ) = nC;
-Node_occurence { broj_koraka } = Node_occurence_EL; 
+xy_popis { broj_vremenskih_koraka } = xy;
+EL_popis ( : , : , broj_vremenskih_koraka ) = EL;
+pomak_popis { broj_vremenskih_koraka } = pomak;
+Conf_popis { broj_vremenskih_koraka } = Conf_force;
+Energy_FEM_popis ( broj_vremenskih_koraka ) = Energy_FEM;
+Node_number ( broj_vremenskih_koraka ) = nC;
+Node_occurence { broj_vremenskih_koraka } = Node_occurence_EL; 
 
 
-if broj_koraka ~= 1
-    norma_popis ( broj_koraka ) = norma;
+if broj_vremenskih_koraka ~= 1
+    norma_popis ( broj_vremenskih_koraka ) = norma;
 else
     norma = NaN;
 end;
 
-if rem ( broj_koraka , 1 ) == 0
+if rem ( broj_vremenskih_koraka , 1 ) == 0
     
-    disp ( [ 'Broj koraka: ', num2str(broj_koraka) , ' Norma konfiguracijskih sila: ', num2str(norma), ' Energija: ', num2str(Energy_FEM) ] )
+%     disp ( [ 'Broj koraka: ', num2str(broj_vremenskih_koraka) , ' Norma konfiguracijskih sila: ', num2str(norma), ' Energija: ', num2str(Energy_FEM) ] )
     
 end;
 
 % if broj_koraka == 1 || broj_koraka == 2
     
-    Usporedba_korak = cat(3,Usporedba_korak, broj_koraka);
+    Usporedba_korak = cat(3,Usporedba_korak, broj_vremenskih_koraka);
     Naprezanja_korak = cat(3,Naprezanja_korak , Naprezanja);
     Deformacije_korak = cat(3,Deformacije_korak , Deformacije );
     detJacob_korak = cat(3,detJacob_korak , detJacob_save );
@@ -586,89 +741,89 @@ end;
 
 end;
 
-% xy_popis = xy_popis ( : , : , 1 : broj_koraka - Oduzmi );
-% pomak_popis = pomak_popis ( : , 1 : broj_koraka - Oduzmi );
-% Conf_popis = Conf_popis ( : , 1 : broj_koraka - Oduzmi );
-% Energy_FEM_popis = Energy_FEM_popis ( : , 1 : broj_koraka - Oduzmi );
-% norma_popis = norma_popis ( : , 1 : broj_koraka - Oduzmi );
-
-Naprezanja_korak = cat(2,Naprezanja_korak , zeros(nEL*rlength,4,length(Usporedba_korak)));
-
-Naprezanja_korak ( : , 6 , : ) = (Naprezanja_korak(:,3,:) + Naprezanja_korak(:,4,:))/2 + sqrt( (Naprezanja_korak(:,3,:)-Naprezanja_korak(:,4,:)).^2/4 + Naprezanja_korak(:,5,:).^2 );
-Naprezanja_korak ( : , 7 , : ) = (Naprezanja_korak(:,3,:) + Naprezanja_korak(:,4,:))/2 - sqrt( (Naprezanja_korak(:,3,:)-Naprezanja_korak(:,4,:)).^2/4 + Naprezanja_korak(:,5,:).^2 );
-Naprezanja_korak ( : , 8 , : ) = atan ( 2 .* Naprezanja_korak(:,5,:) ./ (Naprezanja_korak(:,3,:)-Naprezanja_korak(:,4,:)) ) / 2;
-Naprezanja_korak ( : , 9 , : ) = atan ( 2 .* Naprezanja_korak(:,5,:) ./ (Naprezanja_korak(:,3,:)-Naprezanja_korak(:,4,:)) ) / 2 + pi/2;
-
-for ii = 1 : nEL
-    
-    detJacob_element ( ii , : ) = sum ( detJacob_korak ( (ii - 1 ) * rlength + 1 : ii * rlength ) );
-    
-end;
-
-% % % % [shape4lin,~,~] = iso4lin(0, 0);
+% % % % % xy_popis = xy_popis ( : , : , 1 : broj_koraka - Oduzmi );
+% % % % % pomak_popis = pomak_popis ( : , 1 : broj_koraka - Oduzmi );
+% % % % % Conf_popis = Conf_popis ( : , 1 : broj_koraka - Oduzmi );
+% % % % % Energy_FEM_popis = Energy_FEM_popis ( : , 1 : broj_koraka - Oduzmi );
+% % % % % norma_popis = norma_popis ( : , 1 : broj_koraka - Oduzmi );
+% % % % 
+% % % % Naprezanja_korak = cat(2,Naprezanja_korak , zeros(nEL*rlength,4,length(Usporedba_korak)));
+% % % % 
+% % % % Naprezanja_korak ( : , 6 , : ) = (Naprezanja_korak(:,3,:) + Naprezanja_korak(:,4,:))/2 + sqrt( (Naprezanja_korak(:,3,:)-Naprezanja_korak(:,4,:)).^2/4 + Naprezanja_korak(:,5,:).^2 );
+% % % % Naprezanja_korak ( : , 7 , : ) = (Naprezanja_korak(:,3,:) + Naprezanja_korak(:,4,:))/2 - sqrt( (Naprezanja_korak(:,3,:)-Naprezanja_korak(:,4,:)).^2/4 + Naprezanja_korak(:,5,:).^2 );
+% % % % Naprezanja_korak ( : , 8 , : ) = atan ( 2 .* Naprezanja_korak(:,5,:) ./ (Naprezanja_korak(:,3,:)-Naprezanja_korak(:,4,:)) ) / 2;
+% % % % Naprezanja_korak ( : , 9 , : ) = atan ( 2 .* Naprezanja_korak(:,5,:) ./ (Naprezanja_korak(:,3,:)-Naprezanja_korak(:,4,:)) ) / 2 + pi/2;
 % % % % 
 % % % % for ii = 1 : nEL
 % % % %     
-% % % %     Naprezanja_element ( ii , 1:2 , : )  = shape4lin * [ ELX1(:,ii), ELY1(:,ii) ];
-% % % %     Naprezanja_element ( ii , 3 , : ) = sum( Naprezanja_korak ( (ii-1)*rlength+1:ii*rlength , 6 , : ) .* (detJacob_korak ( (ii - 1) * rlength + 1 : ii * rlength , : ) ) / detJacob_element ( ii ) );
-% % % %     Naprezanja_element ( ii , 4 , : ) = sum( Naprezanja_korak ( (ii-1)*rlength+1:ii*rlength , 7 , : ) .* (detJacob_korak ( (ii - 1) * rlength + 1 : ii * rlength , : ) ) / detJacob_element ( ii ) );
-% % % %     Naprezanja_element ( ii , 5 , : ) = sum( Naprezanja_korak ( (ii-1)*rlength+1:ii*rlength , 8 , : ) .* (detJacob_korak ( (ii - 1) * rlength + 1 : ii * rlength , : ) ) / detJacob_element ( ii ) );
-% % % %     Naprezanja_element ( ii , 6 , : ) = sum( Naprezanja_korak ( (ii-1)*rlength+1:ii*rlength , 9 , : ) .* (detJacob_korak ( (ii - 1) * rlength + 1 : ii * rlength , : ) ) / detJacob_element ( ii ) );
+% % % %     detJacob_element ( ii , : ) = sum ( detJacob_korak ( (ii - 1 ) * rlength + 1 : ii * rlength ) );
+% % % %     
+% % % % end;
+% % % % 
+% % % % % % % % [shape4lin,~,~] = iso4lin(0, 0);
+% % % % % % % % 
+% % % % % % % % for ii = 1 : nEL
+% % % % % % % %     
+% % % % % % % %     Naprezanja_element ( ii , 1:2 , : )  = shape4lin * [ ELX1(:,ii), ELY1(:,ii) ];
+% % % % % % % %     Naprezanja_element ( ii , 3 , : ) = sum( Naprezanja_korak ( (ii-1)*rlength+1:ii*rlength , 6 , : ) .* (detJacob_korak ( (ii - 1) * rlength + 1 : ii * rlength , : ) ) / detJacob_element ( ii ) );
+% % % % % % % %     Naprezanja_element ( ii , 4 , : ) = sum( Naprezanja_korak ( (ii-1)*rlength+1:ii*rlength , 7 , : ) .* (detJacob_korak ( (ii - 1) * rlength + 1 : ii * rlength , : ) ) / detJacob_element ( ii ) );
+% % % % % % % %     Naprezanja_element ( ii , 5 , : ) = sum( Naprezanja_korak ( (ii-1)*rlength+1:ii*rlength , 8 , : ) .* (detJacob_korak ( (ii - 1) * rlength + 1 : ii * rlength , : ) ) / detJacob_element ( ii ) );
+% % % % % % % %     Naprezanja_element ( ii , 6 , : ) = sum( Naprezanja_korak ( (ii-1)*rlength+1:ii*rlength , 9 , : ) .* (detJacob_korak ( (ii - 1) * rlength + 1 : ii * rlength , : ) ) / detJacob_element ( ii ) );
+% % % % % % % % 
+% % % % % % % % end;
+% % % % 
+% % % % 
+% % % % % Stress recovery procedure from Boulder Colorado IFEM chapter 28
+% % % % % Stress interpolation from Gauss points to nodal points with additional
+% % % % % nodal stress smoothening
+% % % % 
+% % % % Stress_recovery = zeros ( nEL*rlength , 5 , length(Usporedba_korak) );
+% % % % Recovery_matrix = [ 1+sqrt(3)/2 -1/2 1-sqrt(3)/2 -1/2; -1/2 1+sqrt(3)/2 -1/2 1-sqrt(3)/2; 1-sqrt(3)/2 -1/2 1+sqrt(3)/2 -1/2; -1/2 1-sqrt(3)/2 -1/2 1+sqrt(3)/2 ];
+% % % % 
+% % % % for jj = 1 : length(Usporedba_korak)
+% % % % 
+% % % % for ii = 1 : nEL
+% % % %     
+% % % %     Stress_recovery ( (ii-1)*rlength+1:ii*rlength , 1 , jj ) = Recovery_matrix * Naprezanja_korak ( (ii-1)*rlength+1:ii*rlength , 3 , jj );
+% % % %     Stress_recovery ( (ii-1)*rlength+1:ii*rlength , 2 , jj ) = Recovery_matrix * Naprezanja_korak ( (ii-1)*rlength+1:ii*rlength , 4 , jj );
+% % % %     Stress_recovery ( (ii-1)*rlength+1:ii*rlength , 3 , jj ) = Recovery_matrix * Naprezanja_korak ( (ii-1)*rlength+1:ii*rlength , 5 , jj );
+% % % %     Stress_recovery ( (ii-1)*rlength+1:ii*rlength , 4 , jj ) = Recovery_matrix * Naprezanja_korak ( (ii-1)*rlength+1:ii*rlength , 6 , jj );
+% % % %     Stress_recovery ( (ii-1)*rlength+1:ii*rlength , 5 , jj ) = Recovery_matrix * Naprezanja_korak ( (ii-1)*rlength+1:ii*rlength , 7 , jj );
 % % % % 
 % % % % end;
-
-
-% Stress recovery procedure from Boulder Colorado IFEM chapter 28
-% Stress interpolation from Gauss points to nodal points with additional
-% nodal stress smoothening
-
-Stress_recovery = zeros ( nEL*rlength , 5 , length(Usporedba_korak) );
-Recovery_matrix = [ 1+sqrt(3)/2 -1/2 1-sqrt(3)/2 -1/2; -1/2 1+sqrt(3)/2 -1/2 1-sqrt(3)/2; 1-sqrt(3)/2 -1/2 1+sqrt(3)/2 -1/2; -1/2 1-sqrt(3)/2 -1/2 1+sqrt(3)/2 ];
-
-for jj = 1 : length(Usporedba_korak)
-
-for ii = 1 : nEL
-    
-    Stress_recovery ( (ii-1)*rlength+1:ii*rlength , 1 , jj ) = Recovery_matrix * Naprezanja_korak ( (ii-1)*rlength+1:ii*rlength , 3 , jj );
-    Stress_recovery ( (ii-1)*rlength+1:ii*rlength , 2 , jj ) = Recovery_matrix * Naprezanja_korak ( (ii-1)*rlength+1:ii*rlength , 4 , jj );
-    Stress_recovery ( (ii-1)*rlength+1:ii*rlength , 3 , jj ) = Recovery_matrix * Naprezanja_korak ( (ii-1)*rlength+1:ii*rlength , 5 , jj );
-    Stress_recovery ( (ii-1)*rlength+1:ii*rlength , 4 , jj ) = Recovery_matrix * Naprezanja_korak ( (ii-1)*rlength+1:ii*rlength , 6 , jj );
-    Stress_recovery ( (ii-1)*rlength+1:ii*rlength , 5 , jj ) = Recovery_matrix * Naprezanja_korak ( (ii-1)*rlength+1:ii*rlength , 7 , jj );
-
-end;
-
-end;
-
-Stress_point = zeros ( nC , 5 , length(Usporedba_korak) );
-
-for jj = 1 : length(Usporedba_korak)
-
-for ii = 1 : nEL
-    
-    Stress_point ( EL_popis ( 2 , ii , jj ) , 1:5 , jj ) = Stress_point ( EL_popis ( 2 , ii , jj ) , 1:5 , jj ) + Stress_recovery ( (ii-1)*rlength+1 , : , jj );
-    Stress_point ( EL_popis ( 3 , ii , jj ) , 1:5 , jj ) = Stress_point ( EL_popis ( 3 , ii , jj ) , 1:5 , jj ) + Stress_recovery ( (ii-1)*rlength+2 , : , jj );
-    Stress_point ( EL_popis ( 4 , ii , jj ) , 1:5 , jj ) = Stress_point ( EL_popis ( 4 , ii , jj ) , 1:5 , jj ) + Stress_recovery ( (ii-1)*rlength+3 , : , jj );
-    Stress_point ( EL_popis ( 5 , ii , jj ) , 1:5 , jj ) = Stress_point ( EL_popis ( 5 , ii , jj ) , 1:5 , jj ) + Stress_recovery ( (ii-1)*rlength+4 , : , jj );
-    
-end;
-
-end;
-
-% for ii = 1 : nC
-    
-    % Node_occurence ( ii , 1 ) = sum ( sum ( ii == EL ( 2:5 , : ) ) );
-    
-% end;
-%%%%%%%%%%%%%%%%%%%%%%% IMAM LI 0/0?
-for jj = 1 : length ( Usporedba_korak )
-
-for ii = 1 : Node_number ( jj )
-    
-    Stress_point ( ii , : , jj ) = Stress_point ( ii , : , jj ) ./ Node_occurence{jj} ( ii );
-
-end;
-
-end;
+% % % % 
+% % % % end;
+% % % % 
+% % % % Stress_point = zeros ( nC , 5 , length(Usporedba_korak) );
+% % % % 
+% % % % for jj = 1 : length(Usporedba_korak)
+% % % % 
+% % % % for ii = 1 : nEL
+% % % %     
+% % % %     Stress_point ( EL_popis ( 2 , ii , jj ) , 1:5 , jj ) = Stress_point ( EL_popis ( 2 , ii , jj ) , 1:5 , jj ) + Stress_recovery ( (ii-1)*rlength+1 , : , jj );
+% % % %     Stress_point ( EL_popis ( 3 , ii , jj ) , 1:5 , jj ) = Stress_point ( EL_popis ( 3 , ii , jj ) , 1:5 , jj ) + Stress_recovery ( (ii-1)*rlength+2 , : , jj );
+% % % %     Stress_point ( EL_popis ( 4 , ii , jj ) , 1:5 , jj ) = Stress_point ( EL_popis ( 4 , ii , jj ) , 1:5 , jj ) + Stress_recovery ( (ii-1)*rlength+3 , : , jj );
+% % % %     Stress_point ( EL_popis ( 5 , ii , jj ) , 1:5 , jj ) = Stress_point ( EL_popis ( 5 , ii , jj ) , 1:5 , jj ) + Stress_recovery ( (ii-1)*rlength+4 , : , jj );
+% % % %     
+% % % % end;
+% % % % 
+% % % % end;
+% % % % 
+% % % % % for ii = 1 : nC
+% % % %     
+% % % %     % Node_occurence ( ii , 1 ) = sum ( sum ( ii == EL ( 2:5 , : ) ) );
+% % % %     
+% % % % % end;
+% % % % %%%%%%%%%%%%%%%%%%%%%%% IMAM LI 0/0?
+% % % % for jj = 1 : length ( Usporedba_korak )
+% % % % 
+% % % % for ii = 1 : Node_number ( jj )
+% % % %     
+% % % %     Stress_point ( ii , : , jj ) = Stress_point ( ii , : , jj ) ./ Node_occurence{jj} ( ii );
+% % % % 
+% % % % end;
+% % % % 
+% % % % end;
 
 
 ELX(2:5,:) = ELX1;
@@ -757,7 +912,7 @@ hold off
 
 %Q4_Conf_force_to_VTK(461,400,xy_popis{1},EL_popis(:,:,1),pomak_popis{1},1,Stress_point(:,:,1),Conf_popis{1})
 
-Q4_Conf_force_to_VTK_propagation(Node_number,nEL,xy_popis,EL_popis,pomak_popis,length(Usporedba_korak),Stress_point,Conf_popis)
+% Q4_Conf_force_to_VTK_propagation(Node_number,nEL,xy_popis,EL_popis,pomak_popis,length(Usporedba_korak),Stress_point,Conf_popis)
 
 
 
